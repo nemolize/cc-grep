@@ -103,7 +103,10 @@ test("findTranscripts does not follow symlinks (loop-safe)", async () => {
     // A dir symlink back to the root would recurse forever if followed.
     await symlink(dir, join(dir, "real", "loop"));
     // A file symlink to a .jsonl is also skipped (conservative default).
-    await symlink(join(dir, "real", "r.jsonl"), join(dir, "real", "link.jsonl"));
+    await symlink(
+      join(dir, "real", "r.jsonl"),
+      join(dir, "real", "link.jsonl"),
+    );
 
     const found = [];
     for await (const f of findTranscripts(dir)) found.push(f);
