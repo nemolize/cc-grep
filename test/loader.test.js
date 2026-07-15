@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -93,6 +93,22 @@ test("findTranscripts recurses and only yields .jsonl", async () => {
     expect(found.length).toBe(2);
     const names = found.map((f) => f.split("/").pop()).sort();
     expect(names).toEqual(["one.jsonl", "two.jsonl"]);
+  });
+});
+
+test("findTranscripts does not follow symlinks (loop-safe)", async () => {
+  await withTempDir(async (dir) => {
+    await mkdir(join(dir, "real"), { recursive: true });
+    await writeFile(join(dir, "real", "r.jsonl"), "");
+    // A dir symlink back to the root would recurse forever if followed.
+    await symlink(dir, join(dir, "real", "loop"));
+    // A file symlink to a .jsonl is also skipped (conservative default).
+    await symlink(join(dir, "real", "r.jsonl"), join(dir, "real", "link.jsonl"));
+
+    const found = [];
+    for await (const f of findTranscripts(dir)) found.push(f);
+    const names = found.map((f) => f.split("/").pop()).sort();
+    expect(names).toEqual(["r.jsonl"]);
   });
 });
 

@@ -66,9 +66,11 @@ test("since/until time window", () => {
   ).toBe(false);
 });
 
-test("turns without a timestamp survive time filters (over-include)", () => {
+test("turns without a timestamp are excluded when a time filter is active", () => {
   const t = turn({ timestampMs: undefined });
-  expect(passesFilters(t, opts({ sinceMs: Date.now() }))).toBe(true);
+  expect(passesFilters(t, opts({ sinceMs: Date.now() }))).toBe(false);
+  expect(passesFilters(t, opts({ untilMs: Date.now() }))).toBe(false);
+  expect(passesFilters(t, opts({}))).toBe(true);
 });
 
 test("cwd substring; unknown cwd excluded when filter active", () => {

@@ -10,7 +10,8 @@ import type { Turn } from "./types.js";
 /**
  * Recursively yield every `*.jsonl` file path under `root`. A missing or
  * unreadable directory yields nothing (the caller reports "no transcripts")
- * rather than crashing.
+ * rather than crashing. Symlinks are not followed — a symlink loop under the
+ * transcript root would otherwise recurse forever.
  */
 export async function* findTranscripts(root: string): AsyncGenerator<string> {
   let entries;
@@ -20,6 +21,7 @@ export async function* findTranscripts(root: string): AsyncGenerator<string> {
     return;
   }
   for (const entry of entries) {
+    if (entry.isSymbolicLink()) continue;
     const full = join(root, entry.name);
     if (entry.isDirectory()) {
       yield* findTranscripts(full);

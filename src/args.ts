@@ -167,7 +167,8 @@ export function parseArgs(
         const v = takeValue();
         if (v === undefined) return err(`option ${key} requires a value`);
         try {
-          const ms = parseSinceUntil(v, now);
+          const boundary = key === "--since" ? "since" : "until";
+          const ms = parseSinceUntil(v, boundary, now);
           if (key === "--since") sinceMs = ms;
           else untilMs = ms;
         } catch (e) {
