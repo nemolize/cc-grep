@@ -1,0 +1,60 @@
+name: Build and Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: "${{ github.workflow }}-${{ github.ref }}"
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: build (node ${{ matrix.node-version }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ["22", "24"]
+    # Override only the Node major from the matrix; pnpm still comes from
+    # mise.toml. Tests the engines floor (>=22) across supported majors, while
+    # mise.toml's pinned Node stays the local-dev default.
+    env:
+      MISE_NODE_VERSION: ${{ matrix.node-version }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Set up mise (Node ${{ matrix.node-version }} + pnpm)
+        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        with:
+          # Pin the mise CLI itself; without this the action installs whichever
+          # release is latest at cold-cache time. Renovate keeps this current.
+          version: 2026.7.6
+          # Include the Node major in the cache key so matrix jobs don't share
+          # a single cached install across different Node versions.
+          cache_key_prefix: mise-v1-node${{ matrix.node-version }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm run lint
+
+      # type-check and build need source; skip on the config-only branch
+      # (where src/ hasn't landed yet), run once the implementation is present.
+      - name: Type-check
+        if: hashFiles('src/**/*.ts') != ''
+        run: pnpm run type-check
+
+      - name: Run unit tests
+        run: pnpm run test
+
+      - name: Build
+        if: hashFiles('src/**/*.ts') != ''
+        run: pnpm run build
