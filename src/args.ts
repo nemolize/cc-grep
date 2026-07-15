@@ -187,8 +187,8 @@ export function parseArgs(
         const v = takeValue();
         if (v === undefined) return err(`option ${key} requires a value`);
         const n = Number(v);
-        if (!Number.isInteger(n) || n < 0) {
-          return err(`--context must be a non-negative integer (got "${v}")`);
+        if (!Number.isInteger(n) || n < 0 || n > 10_000) {
+          return err(`--context must be an integer in [0, 10000] (got "${v}")`);
         }
         context = n;
         break;
