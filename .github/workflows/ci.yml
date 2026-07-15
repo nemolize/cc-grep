@@ -20,9 +20,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node-version: ["20", "22", "24"]
+        node-version: ["22", "24"]
     # Override only the Node major from the matrix; pnpm still comes from
-    # mise.toml. Tests the engines floor (>=20) across supported majors, while
+    # mise.toml. Tests the engines floor (>=22) across supported majors, while
     # mise.toml's pinned Node stays the local-dev default.
     env:
       MISE_NODE_VERSION: ${{ matrix.node-version }}
@@ -32,6 +32,13 @@ jobs:
 
       - name: Set up mise (Node ${{ matrix.node-version }} + pnpm)
         uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        with:
+          # Pin the mise CLI itself; without this the action installs whichever
+          # release is latest at cold-cache time. Renovate keeps this current.
+          version: 2026.7.6
+          # Include the Node major in the cache key so matrix jobs don't share
+          # a single cached install across different Node versions.
+          cache_key_prefix: mise-v1-node${{ matrix.node-version }}
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
