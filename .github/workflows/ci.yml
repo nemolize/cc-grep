@@ -39,11 +39,15 @@ jobs:
       - name: Lint
         run: pnpm run lint
 
+      # type-check and build need source; skip on the config-only branch
+      # (where src/ hasn't landed yet), run once the implementation is present.
       - name: Type-check
+        if: hashFiles('src/**/*.ts') != ''
         run: pnpm run type-check
 
       - name: Run unit tests
         run: pnpm run test
 
       - name: Build
+        if: hashFiles('src/**/*.ts') != ''
         run: pnpm run build
