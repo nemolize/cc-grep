@@ -7,6 +7,11 @@ import { isRecord } from "./guards.js";
 import { extractTextLines } from "./textExtract.js";
 import type { Turn } from "./types.js";
 
+// A single JSONL record over this many characters is either a pathological
+// tool-result dump or a corrupted file — skip it rather than pay the
+// JSON.parse + text-extract cost twice against readline's buffered line.
+const MAX_JSONL_RECORD_CHARS = 8_000_000;
+
 /**
  * Recursively yield every `*.jsonl` file path under `root`. A missing or
  * unreadable directory yields nothing (the caller reports "no transcripts")
@@ -64,6 +69,7 @@ function parseLine(
   lineIndex: number,
   line: string,
 ): Turn | undefined {
+  if (line.length > MAX_JSONL_RECORD_CHARS) return undefined;
   let parsed: unknown;
   try {
     parsed = JSON.parse(line);

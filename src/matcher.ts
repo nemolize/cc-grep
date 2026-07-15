@@ -7,6 +7,11 @@ export interface Matcher {
   ranges(line: string): Array<[number, number]>;
 }
 
+// JS has no regex execution timeout, so a catastrophic-backtracking pattern on
+// a long line can wedge the whole scan. Skip lines above this length rather
+// than evaluate them — a transcript line over 1 MB is already pathological.
+const MAX_MATCH_LINE_BYTES = 1_000_000;
+
 function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -31,10 +36,12 @@ export function buildMatcher(opts: Options): Matcher {
 
   return {
     test(line: string): boolean {
+      if (line.length > MAX_MATCH_LINE_BYTES) return false;
       re.lastIndex = 0;
       return re.test(line);
     },
     ranges(line: string): Array<[number, number]> {
+      if (line.length > MAX_MATCH_LINE_BYTES) return [];
       const out: Array<[number, number]> = [];
       re.lastIndex = 0;
       for (const m of line.matchAll(re)) {

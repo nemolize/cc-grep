@@ -59,10 +59,12 @@ test("--since relative duration", () => {
     expect(r.options.sinceMs).toBe(NOW - 7 * 86_400_000);
 });
 
-test("--context must be a non-negative integer", () => {
+test("--context must be an integer in [0, 10000]", () => {
   expect(parse(["p", "--context", "-1"]).kind).toBe("error");
   expect(parse(["p", "--context", "x"]).kind).toBe("error");
+  expect(parse(["p", "--context", "10001"]).kind).toBe("error");
   expect(parse(["p", "-C", "0"]).kind).toBe("options");
+  expect(parse(["p", "-C", "10000"]).kind).toBe("options");
 });
 
 test("--color validation", () => {

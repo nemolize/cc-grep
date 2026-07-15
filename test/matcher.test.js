@@ -74,3 +74,15 @@ test("zero-width regex match does not loop forever", () => {
   const ranges = m.ranges("bab");
   expect(ranges.length > 0).toBeTruthy();
 });
+
+test("lines above the size cap are skipped, not evaluated (ReDoS guard)", () => {
+  // Pattern that catastrophically backtracks against a long "aaaa...!" input.
+  const m = buildMatcher(opts({ pattern: "(a+)+$", regex: true }));
+  const huge = "a".repeat(1_000_001) + "!";
+  // Without the cap this would hang the process; the guard makes it return
+  // synchronously with a non-match verdict.
+  const start = Date.now();
+  expect(m.test(huge)).toBe(false);
+  expect(m.ranges(huge)).toEqual([]);
+  expect(Date.now() - start).toBeLessThan(1000);
+});

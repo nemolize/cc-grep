@@ -26,6 +26,17 @@ function installEpipeGuard(): void {
   });
 }
 
+/**
+ * Write to stdout, awaiting `drain` when the internal buffer is full. Without
+ * this, a fast producer piped into a slow consumer buffers unbounded output
+ * in memory.
+ */
+async function writeStdout(chunk: string): Promise<void> {
+  if (!process.stdout.write(chunk)) {
+    await new Promise<void>((resolve) => process.stdout.once("drain", resolve));
+  }
+}
+
 async function main(): Promise<number> {
   installEpipeGuard();
   const home = homedir();
@@ -33,10 +44,10 @@ async function main(): Promise<number> {
 
   switch (parsed.kind) {
     case "help":
-      process.stdout.write(HELP);
+      await writeStdout(HELP);
       return 0;
     case "version":
-      process.stdout.write(VERSION + "\n");
+      await writeStdout(VERSION + "\n");
       return 0;
     case "error":
       process.stderr.write(`cc-grep: ${parsed.message}\n\n${HELP}`);
@@ -65,9 +76,9 @@ async function main(): Promise<number> {
       if (!firstHit) firstHit = hit;
 
       if (opts.json) {
-        process.stdout.write(formatHitJson(hit, home) + "\n");
+        await writeStdout(formatHitJson(hit, home) + "\n");
       } else {
-        process.stdout.write(formatHit(hit, opts, home, color) + "\n\n");
+        await writeStdout(formatHit(hit, opts, home, color) + "\n\n");
       }
 
       if (opts.printResume) {
@@ -86,10 +97,10 @@ async function main(): Promise<number> {
   if (!opts.json) {
     if (opts.resume && firstHit !== undefined) {
       const cmd = resumeCommand(firstHit);
-      if (cmd !== undefined) process.stdout.write(`\n${cmd}\n`);
+      if (cmd !== undefined) await writeStdout(`\n${cmd}\n`);
     }
     if (opts.printResume && resumeLines.length > 0) {
-      process.stdout.write("\n" + resumeLines.join("\n") + "\n");
+      await writeStdout("\n" + resumeLines.join("\n") + "\n");
     }
   }
 
@@ -97,11 +108,16 @@ async function main(): Promise<number> {
   return count > 0 ? 0 : 1;
 }
 
+// Set exitCode and let Node drain stdout naturally rather than calling
+// process.exit(code), which truncates any unflushed output when piped into
+// a slow consumer.
 main()
-  .then((code) => process.exit(code))
+  .then((code) => {
+    process.exitCode = code;
+  })
   .catch((err) => {
     process.stderr.write(
       `cc-grep: unexpected error: ${err instanceof Error ? err.stack : String(err)}\n`,
     );
-    process.exit(2);
+    process.exitCode = 2;
   });
