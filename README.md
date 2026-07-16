@@ -77,6 +77,23 @@ low-thousands-of-sessions corpus) that no index is needed.
 
 Node.js 22+. No native dependencies.
 
+## Development
+
+```
+pnpm install
+pnpm run build
+pnpm start <pattern> [options]   # e.g. `pnpm start -h`, `pnpm start "auth flow"`
+```
+
+`pnpm start` is `node dist/cli.js`, so a `pnpm run build` is required after
+each source change. Pass CLI options after the pattern the same as `cc-grep`
+itself.
+
+Don't prefix flags with `--` — write `pnpm start -h`, not `pnpm start -- -h`.
+pnpm forwards the trailing `-h` past its own separator, and the CLI's own `--`
+stops flag parsing, so `-h` lands as the search pattern instead of the help
+flag.
+
 ## License
 
 MIT
