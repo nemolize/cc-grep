@@ -14,11 +14,14 @@ Read-only. Nothing ever leaves your machine.
 ## Usage
 
 ```
-npx cc-grep <pattern> [options]
+npx @nemolize/cc-grep <pattern> [options]
 ```
 
+The `bin` entry is `cc-grep`, so once installed globally (or symlinked) the
+command is just `cc-grep <pattern>`.
+
 ```
-$ npx cc-grep "auth flow"
+$ npx @nemolize/cc-grep "auth flow"
 ~/proj-a  2026-07-10 21:34  a1b2c3d4  user
   │ …preceding line…
   │ >> …matched line with auth flow highlighted…
@@ -72,7 +75,7 @@ low-thousands-of-sessions corpus) that no index is needed.
 
 ## Requirements
 
-Node.js 20+. No native dependencies.
+Node.js 22+. No native dependencies.
 
 ## License
 

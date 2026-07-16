@@ -1,7 +1,18 @@
 {
-  "name": "cc-grep",
+  "name": "@nemolize/cc-grep",
   "version": "0.1.0",
   "description": "Cross-project full-text search CLI over Claude Code session transcripts. Run with npx.",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nemolize/cc-grep.git"
+  },
+  "bugs": {
+    "url": "https://github.com/nemolize/cc-grep/issues"
+  },
+  "homepage": "https://github.com/nemolize/cc-grep#readme",
   "keywords": [
     "claude",
     "claude-code",
