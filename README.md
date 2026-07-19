@@ -11,6 +11,13 @@ their project, timestamp, session id, and role — plus a ready-to-run
 
 Read-only. Nothing ever leaves your machine.
 
+## Why
+
+You solved something with Claude weeks ago and now hit the same problem — but
+the shell history is gone and you can't remember which project it was in.
+`cc-grep "denyRead"` finds the turn; `--resume` drops you back into that
+session.
+
 ## Usage
 
 ```
@@ -55,10 +62,28 @@ $ npx @nemolize/cc-grep "auth flow"
 - `-C, --context <N>` — lines of context around each match (default: 2).
 - `--json` — emit one JSON object per hit, one per line, for piping to `jq`.
 - `--color <always|never|auto>` — colorize output (default: auto-detects a TTY).
-- `--resume` — print `claude --resume <id>` for the top hit.
-- `--print-resume` — print the resume command for every hit.
+- `--resume` — print `claude --resume <id>` for the top hit only. Use once
+  your filters have narrowed things down to the session you want.
+- `--print-resume` — print the resume command for every hit. Use while
+  browsing, so any hit can be jumped into.
 
-### Exit status
+## Recipes
+
+```sh
+# What did I ask about X in the last month?
+cc-grep "X" --role user --since 30d
+
+# Jump back into the most relevant past session
+cc-grep "X" --resume
+
+# Only sessions from a specific project
+cc-grep "X" --cwd myrepo
+
+# List the unique sessions that mention X
+cc-grep "X" --json | jq -r .sessionId | sort -u
+```
+
+## Exit status
 
 `0` when at least one hit is found, `1` when none, `2` on a usage error
 (following the `grep` convention).
@@ -75,7 +100,9 @@ low-thousands-of-sessions corpus) that no index is needed.
 
 ## Requirements
 
-Node.js 22+. No native dependencies.
+Node.js 22+ — the floor tracks the active LTS line (enforced via the
+package's `engines` field); older runtimes are untested. No native
+dependencies.
 
 ## Development
 
@@ -88,6 +115,10 @@ pnpm start <pattern> [options]   # e.g. `pnpm start -h`, `pnpm start "auth flow"
 `pnpm start` is `node dist/cli.js`, so a `pnpm run build` is required after
 each source change. Pass CLI options after the pattern the same as `cc-grep`
 itself.
+
+## Gotchas
+
+### `pnpm start -- -h` breaks flag parsing
 
 Don't prefix flags with `--` — write `pnpm start -h`, not `pnpm start -- -h`.
 pnpm forwards the trailing `-h` past its own separator, and the CLI's own `--`
