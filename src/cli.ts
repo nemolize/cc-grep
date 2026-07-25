@@ -1,5 +1,8 @@
 #!/usr/bin/env node
+import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { HELP, parseArgs } from "./args.js";
 import {
@@ -8,11 +11,23 @@ import {
   resumeCommand,
   shouldColor,
 } from "./format.js";
+import { isRecord } from "./guards.js";
 import { isReadableDir } from "./loader.js";
 import { search } from "./search.js";
 import type { Hit } from "./types.js";
 
-const VERSION = "0.1.0";
+/** Read at runtime rather than hardcoded: a literal drifts from package.json on release. */
+function readVersion(): string {
+  const pkgPath = join(
+    dirname(fileURLToPath(import.meta.url)),
+    "..",
+    "package.json",
+  );
+  const pkg: unknown = JSON.parse(readFileSync(pkgPath, "utf8"));
+  if (isRecord(pkg) && typeof pkg["version"] === "string")
+    return pkg["version"];
+  throw new Error(`no version field in ${pkgPath}`);
+}
 
 /**
  * Exit quietly when a downstream consumer closes the pipe (`cc-grep foo | head`,
@@ -47,7 +62,7 @@ async function main(): Promise<number> {
       await writeStdout(HELP);
       return 0;
     case "version":
-      await writeStdout(VERSION + "\n");
+      await writeStdout(readVersion() + "\n");
       return 0;
     case "error":
       process.stderr.write(`cc-grep: ${parsed.message}\n\n${HELP}`);

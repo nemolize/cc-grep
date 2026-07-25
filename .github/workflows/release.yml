@@ -50,6 +50,10 @@ jobs:
       - name: Type-check
         run: pnpm run type-check
 
+      # Before the tests: test/cli.test.js runs the built CLI from dist/.
+      - name: Build
+        run: pnpm run build
+
       - name: Run unit tests
         run: pnpm run test
 

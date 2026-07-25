@@ -1,6 +1,6 @@
 {
   "name": "@nemolize/cc-grep",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Cross-project full-text search CLI over Claude Code session transcripts. Run with npx.",
   "publishConfig": {
     "access": "public"
