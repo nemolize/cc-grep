@@ -1,0 +1,90 @@
+name: Release
+
+# npm auth uses Trusted Publishing (OIDC) — no NPM_TOKEN secret. The trusted
+# publisher (this repo + this workflow filename) must be registered once on
+# npmjs.com before the first OIDC publish succeeds. pnpm performs the OIDC
+# publish itself, so no npm CLI setup is needed.
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write # create the GitHub Release
+      id-token: write # request the OIDC token for npm Trusted Publishing
+    steps:
+      - name: Check out code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+
+      - name: Set up mise (Node + pnpm)
+        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        with:
+          version: 2026.7.6
+
+      - name: Verify tag matches package.json version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          pkg="$(node -p "require('./package.json').version")"
+          if [ "$tag" != "$pkg" ]; then
+            echo "::error::tag v$tag does not match package.json version $pkg"
+            exit 1
+          fi
+          echo "tag and package.json agree on $pkg"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Re-run the CI checks: a tag push bypasses ci.yml entirely.
+      - name: Lint
+        run: pnpm run lint
+
+      - name: Type-check
+        run: pnpm run type-check
+
+      - name: Run unit tests
+        run: pnpm run test
+
+      # A prerelease tag (v1.2.3-beta.0) must not become the `latest` dist-tag
+      # nor a non-prerelease GitHub Release.
+      - name: Classify release
+        id: classify
+        run: |
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then
+            echo "npm_tag=next" >>"$GITHUB_OUTPUT"
+            echo "prerelease_flag=--prerelease" >>"$GITHUB_OUTPUT"
+          else
+            echo "npm_tag=latest" >>"$GITHUB_OUTPUT"
+            echo "prerelease_flag=" >>"$GITHUB_OUTPUT"
+          fi
+
+      # Idempotent: a re-run after a partial failure (publish succeeded but the
+      # Release step failed) skips the already-published version instead of
+      # dying on npm's republish block. prepublishOnly runs the build.
+      - name: Publish to npm (Trusted Publishing / OIDC)
+        run: |
+          name="$(node -p "require('./package.json').name")"
+          if npm view "${name}@${GITHUB_REF_NAME#v}" version >/dev/null 2>&1; then
+            echo "${name}@${GITHUB_REF_NAME#v} already published — skipping"
+          else
+            pnpm publish --provenance --no-git-checks --tag "${{ steps.classify.outputs.npm_tag }}"
+          fi
+
+      # Idempotent + --verify-tag: never recreate a deleted tag off the default
+      # branch (which would point the Release at code npm never published).
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
+            || gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+              --title "$GITHUB_REF_NAME" --generate-notes --verify-tag \
+              ${{ steps.classify.outputs.prerelease_flag }}
