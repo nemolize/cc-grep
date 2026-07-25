@@ -4,6 +4,11 @@ Grep across every Claude Code session transcript on your machine, so you can
 find past conversations by content — _"what did I discuss with Claude about X
 three weeks ago?"_
 
+You solved something with Claude weeks ago and now hit the same problem — but
+the shell history is gone and you can't remember which project it was in.
+`cc-grep "denyRead"` finds the turn; `--resume` drops you back into that
+session.
+
 Claude Code stores each session as a JSONL transcript under
 `~/.claude/projects/`. `cc-grep` scans them all and prints matching turns with
 their project, timestamp, session id, and role — plus a ready-to-run
@@ -11,21 +16,12 @@ their project, timestamp, session id, and role — plus a ready-to-run
 
 Read-only. Nothing ever leaves your machine.
 
-## Why
-
-You solved something with Claude weeks ago and now hit the same problem — but
-the shell history is gone and you can't remember which project it was in.
-`cc-grep "denyRead"` finds the turn; `--resume` drops you back into that
-session.
-
 ## Usage
 
 ```
 npx @nemolize/cc-grep <pattern> [options]
+cc-grep <pattern> [options]              # once installed globally
 ```
-
-The `bin` entry is `cc-grep`, so once installed globally (or symlinked) the
-command is just `cc-grep <pattern>`.
 
 ```
 $ npx @nemolize/cc-grep "auth flow"
@@ -112,18 +108,8 @@ pnpm run build
 pnpm start <pattern> [options]   # e.g. `pnpm start -h`, `pnpm start "auth flow"`
 ```
 
-`pnpm start` is `node dist/cli.js`, so a `pnpm run build` is required after
-each source change. Pass CLI options after the pattern the same as `cc-grep`
-itself.
-
-## Gotchas
-
-### `pnpm start -- -h` breaks flag parsing
-
-Don't prefix flags with `--` — write `pnpm start -h`, not `pnpm start -- -h`.
-pnpm forwards the trailing `-h` past its own separator, and the CLI's own `--`
-stops flag parsing, so `-h` lands as the search pattern instead of the help
-flag.
+`pnpm start` runs the built output, so re-run `pnpm run build` after each
+source change.
 
 ## License
 
