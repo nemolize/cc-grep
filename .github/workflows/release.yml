@@ -3,10 +3,7 @@ name: Release
 # npm auth uses Trusted Publishing (OIDC) — no NPM_TOKEN secret. The trusted
 # publisher (this repo + this workflow filename) must be registered once on
 # npmjs.com before the first OIDC publish succeeds. pnpm performs the OIDC
-# publish itself (>= 11.1.3), so no npm CLI setup is needed.
-#
-# A tag push does not trigger ci.yml, so this job re-runs lint/type-check/tests
-# before publishing — a tag must not ship code that never passed CI.
+# publish itself, so no npm CLI setup is needed.
 on:
   push:
     tags:
@@ -61,12 +58,12 @@ jobs:
       - name: Classify release
         id: classify
         run: |
-          if [ "${GITHUB_REF_NAME}" != "${GITHUB_REF_NAME%-*}" ]; then
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then
             echo "npm_tag=next" >>"$GITHUB_OUTPUT"
-            echo "gh_flag=--prerelease" >>"$GITHUB_OUTPUT"
+            echo "prerelease_flag=--prerelease" >>"$GITHUB_OUTPUT"
           else
             echo "npm_tag=latest" >>"$GITHUB_OUTPUT"
-            echo "gh_flag=" >>"$GITHUB_OUTPUT"
+            echo "prerelease_flag=" >>"$GITHUB_OUTPUT"
           fi
 
       # Idempotent: a re-run after a partial failure (publish succeeded but the
@@ -90,4 +87,4 @@ jobs:
           gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
             || gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
               --title "$GITHUB_REF_NAME" --generate-notes --verify-tag \
-              ${{ steps.classify.outputs.gh_flag }}
+              ${{ steps.classify.outputs.prerelease_flag }}
