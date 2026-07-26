@@ -52,6 +52,21 @@ const NEEDS_VALUE = new Set([
   "--color",
 ]);
 
+const VALUELESS_LONG_OPTIONS = new Set([
+  "--help",
+  "--version",
+  "--regex",
+  "--fixed",
+  "--ignore-case",
+  "--include-meta",
+  "--resume",
+  "--print-resume",
+  "--json",
+]);
+
+const isOptionToken = (value: string | undefined): boolean =>
+  value !== undefined && (value.startsWith("--") || /^-[A-Za-z]$/.test(value));
+
 /**
  * Parse argv (excluding node + script) into structured options. Unknown flags
  * and missing values produce an `error` result rather than throwing, so the CLI
@@ -115,9 +130,13 @@ export function parseArgs(
     if (
       NEEDS_VALUE.has(key) &&
       inlineValue === undefined &&
-      i + 1 >= argv.length
+      (argv[i + 1] === undefined || isOptionToken(argv[i + 1]))
     ) {
       return err(`option ${key} requires a value`);
+    }
+
+    if (inlineValue !== undefined && VALUELESS_LONG_OPTIONS.has(key)) {
+      return err(`option ${key} does not take a value`);
     }
 
     switch (key) {
@@ -208,6 +227,10 @@ export function parseArgs(
 
   if (pattern === undefined) {
     return err("missing search pattern");
+  }
+
+  if (sinceMs !== undefined && untilMs !== undefined && sinceMs > untilMs) {
+    return err("--since must not be after --until");
   }
 
   return {

@@ -38,6 +38,23 @@ test("boolean flags", () => {
   }
 });
 
+test.each([
+  "--help",
+  "--version",
+  "--regex",
+  "--fixed",
+  "--ignore-case",
+  "--include-meta",
+  "--resume",
+  "--print-resume",
+  "--json",
+])("%s rejects an inline value", (flag) => {
+  expect(parse(["p", `${flag}=false`])).toEqual({
+    kind: "error",
+    message: `option ${flag} does not take a value`,
+  });
+});
+
 test("--key=value form", () => {
   const r = parse(["p", "--role=assistant", "--context=5"]);
   expect(r.kind).toBe("options");
@@ -59,8 +76,18 @@ test("--since relative duration", () => {
     expect(r.options.sinceMs).toBe(NOW - 7 * 86_400_000);
 });
 
+test("--since after --until errors", () => {
+  expect(parse(["p", "--since", "1d", "--until", "2d"])).toEqual({
+    kind: "error",
+    message: "--since must not be after --until",
+  });
+});
+
 test("--context must be an integer in [0, 10000]", () => {
-  expect(parse(["p", "--context", "-1"]).kind).toBe("error");
+  expect(parse(["p", "--context", "-1"])).toEqual({
+    kind: "error",
+    message: '--context must be an integer in [0, 10000] (got "-1")',
+  });
   expect(parse(["p", "--context", "x"]).kind).toBe("error");
   expect(parse(["p", "--context", "10001"]).kind).toBe("error");
   expect(parse(["p", "-C", "0"]).kind).toBe("options");
@@ -85,6 +112,35 @@ test("-- stops flag parsing so a dash-leading pattern works", () => {
 
 test("missing value for a value-taking option errors", () => {
   expect(parse(["p", "--root"]).kind).toBe("error");
+});
+
+test.each([
+  "--root",
+  "--role",
+  "--since",
+  "--until",
+  "--cwd",
+  "--branch",
+  "-C",
+  "--context",
+  "--color",
+])("%s does not consume the next flag as its value", (option) => {
+  expect(parse(["p", option, "--json"])).toEqual({
+    kind: "error",
+    message: `option ${option} requires a value`,
+  });
+});
+
+test.each([
+  ["--root", "-"],
+  ["--cwd", "-generated"],
+  ["--branch", "-wip"],
+])("%s accepts a separated dash-prefixed value", (option, value) => {
+  const result = parse(["p", option, value]);
+  expect(result.kind).toBe("options");
+  if (result.kind === "options") {
+    expect(result.options[option.slice(2)]).toBe(value);
+  }
 });
 
 test("extra positional argument errors", () => {
