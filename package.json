@@ -50,6 +50,7 @@
     "eslint-plugin-unused-imports": "^4.4.1",
     "globals": "^17.7.0",
     "prettier": "^3.9.5",
+    "semver": "^7.8.5",
     "typescript": "^5.5.0",
     "typescript-eslint": "^8.63.0",
     "vitest": "^4.1.10"
