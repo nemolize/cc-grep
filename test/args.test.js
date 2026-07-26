@@ -27,6 +27,14 @@ test("help and version", () => {
   expect(parse(["-V"]).kind).toBe("version");
   expect(parse(["--help", "--nope"]).kind).toBe("help");
   expect(parse(["--version", "--help"]).kind).toBe("version");
+  expect(parse(["-hV"]).kind).toBe("help");
+  expect(parse(["-Vh"]).kind).toBe("version");
+  expect(parse(["-eV", "--nope"]).kind).toBe("version");
+  expect(parse(["-hC"]).kind).toBe("help");
+  expect(parse(["p", "-Ch"])).toEqual({
+    kind: "error",
+    message: '--context must be an integer in [0, 10000] (got "h")',
+  });
 });
 
 test("help documents dash-prefixed option values", () => {

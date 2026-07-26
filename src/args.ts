@@ -70,11 +70,32 @@ const parseConfiguredArgs = (args: string[]) =>
     allowPositionals: true,
   });
 
+const SHORT_OPTION_TYPES = new Map<string, "boolean" | "string">();
+for (const option of Object.values(ARG_OPTIONS)) {
+  if ("short" in option) {
+    SHORT_OPTION_TYPES.set(option.short, option.type);
+  }
+}
+
+const CONTROL_SHORT_OPTIONS = new Map<string, "help" | "version">([
+  [ARG_OPTIONS.help.short, "help"],
+  [ARG_OPTIONS.version.short, "version"],
+]);
+
 const findControlOption = (args: string[]): "help" | "version" | undefined => {
   for (const arg of args) {
     if (arg === "--") return undefined;
     if (arg === "-h" || arg === "--help") return "help";
     if (arg === "-V" || arg === "--version") return "version";
+    if (!arg.startsWith("-") || arg.startsWith("--") || arg === "-") continue;
+
+    for (const shortName of arg.slice(1)) {
+      const controlOption = CONTROL_SHORT_OPTIONS.get(shortName);
+      if (controlOption !== undefined) return controlOption;
+
+      const optionType = SHORT_OPTION_TYPES.get(shortName);
+      if (optionType === undefined || optionType === "string") break;
+    }
   }
   return undefined;
 };
