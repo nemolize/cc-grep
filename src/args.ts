@@ -1,3 +1,5 @@
+import { parseArgs as parseNodeArgs } from "node:util";
+
 import { parseSinceUntil } from "./duration.js";
 import { defaultRoot } from "./loader.js";
 import type { ColorMode, Options, RoleFilter } from "./types.js";
@@ -15,6 +17,7 @@ Pattern:
 
 Scope:
   --root <path>        Transcript root (default: $CC_GREP_ROOT or ~/.claude/projects)
+  Dash-prefixed option values require --option=value (e.g. --cwd=-generated).
 
 Filters:
   --role <user|assistant|any>   Restrict by turn role (default: any)
@@ -40,17 +43,62 @@ export type ParseResult =
   | { kind: "version" }
   | { kind: "error"; message: string };
 
-const NEEDS_VALUE = new Set([
-  "--root",
-  "--role",
-  "--since",
-  "--until",
-  "--cwd",
-  "--branch",
-  "-C",
-  "--context",
-  "--color",
+const ARG_OPTIONS = {
+  regex: { type: "boolean", short: "e" },
+  fixed: { type: "boolean", short: "F" },
+  "ignore-case": { type: "boolean", short: "i" },
+  root: { type: "string" },
+  role: { type: "string" },
+  since: { type: "string" },
+  until: { type: "string" },
+  cwd: { type: "string" },
+  branch: { type: "string" },
+  "include-meta": { type: "boolean" },
+  context: { type: "string", short: "C" },
+  json: { type: "boolean" },
+  color: { type: "string" },
+  resume: { type: "boolean" },
+  "print-resume": { type: "boolean" },
+  help: { type: "boolean", short: "h" },
+  version: { type: "boolean", short: "V" },
+} as const;
+
+const parseConfiguredArgs = (args: string[]) =>
+  parseNodeArgs({
+    args,
+    options: ARG_OPTIONS,
+    allowPositionals: true,
+  });
+
+const SHORT_OPTION_TYPES = new Map<string, "boolean" | "string">();
+for (const option of Object.values(ARG_OPTIONS)) {
+  if ("short" in option) {
+    SHORT_OPTION_TYPES.set(option.short, option.type);
+  }
+}
+
+const CONTROL_SHORT_OPTIONS = new Map<string, "help" | "version">([
+  [ARG_OPTIONS.help.short, "help"],
+  [ARG_OPTIONS.version.short, "version"],
 ]);
+
+const findControlOption = (args: string[]): "help" | "version" | undefined => {
+  for (const arg of args) {
+    if (arg === "--") return undefined;
+    if (arg === "-h" || arg === "--help") return "help";
+    if (arg === "-V" || arg === "--version") return "version";
+    if (!arg.startsWith("-") || arg.startsWith("--") || arg === "-") continue;
+
+    for (const shortName of arg.slice(1)) {
+      const controlOption = CONTROL_SHORT_OPTIONS.get(shortName);
+      if (controlOption !== undefined) return controlOption;
+
+      const optionType = SHORT_OPTION_TYPES.get(shortName);
+      if (optionType === undefined || optionType === "string") break;
+    }
+  }
+  return undefined;
+};
 
 /**
  * Parse argv (excluding node + script) into structured options. Unknown flags
@@ -64,170 +112,105 @@ export function parseArgs(
   home: string,
   now: number = Date.now(),
 ): ParseResult {
-  let pattern: string | undefined;
-  let regex = false;
-  let fixed = false;
-  let ignoreCase = false;
-  let root: string | undefined;
-  let role: RoleFilter = "any";
-  let sinceMs: number | undefined;
-  let untilMs: number | undefined;
-  let cwd: string | undefined;
-  let branch: string | undefined;
-  let includeMeta = false;
-  let context = 2;
-  let resume = false;
-  let printResume = false;
-  let json = false;
-  let color: ColorMode = "auto";
+  const controlOption = findControlOption(argv);
+  if (controlOption !== undefined) return { kind: controlOption };
 
-  let noMoreFlags = false;
-
-  for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i];
-    if (arg === undefined) continue;
-
-    if (noMoreFlags || !arg.startsWith("-") || arg === "-") {
-      if (pattern === undefined) pattern = arg;
-      else return err(`unexpected extra argument: "${arg}"`);
-      continue;
-    }
-    if (arg === "--") {
-      noMoreFlags = true;
-      continue;
-    }
-
-    // Support --key=value.
-    let key = arg;
-    let inlineValue: string | undefined;
-    const eq = arg.indexOf("=");
-    if (arg.startsWith("--") && eq !== -1) {
-      key = arg.slice(0, eq);
-      inlineValue = arg.slice(eq + 1);
-    }
-
-    const takeValue = (): string | undefined => {
-      if (inlineValue !== undefined) return inlineValue;
-      if (i + 1 < argv.length) return argv[++i];
-      return undefined;
-    };
-
-    if (
-      NEEDS_VALUE.has(key) &&
-      inlineValue === undefined &&
-      i + 1 >= argv.length
-    ) {
-      return err(`option ${key} requires a value`);
-    }
-
-    switch (key) {
-      case "-h":
-      case "--help":
-        return { kind: "help" };
-      case "-V":
-      case "--version":
-        return { kind: "version" };
-      case "-e":
-      case "--regex":
-        regex = true;
-        break;
-      case "-F":
-      case "--fixed":
-        fixed = true;
-        break;
-      case "-i":
-      case "--ignore-case":
-        ignoreCase = true;
-        break;
-      case "--include-meta":
-        includeMeta = true;
-        break;
-      case "--resume":
-        resume = true;
-        break;
-      case "--print-resume":
-        printResume = true;
-        break;
-      case "--json":
-        json = true;
-        break;
-      case "--root":
-        root = takeValue();
-        break;
-      case "--role": {
-        const v = takeValue();
-        if (v !== "user" && v !== "assistant" && v !== "any") {
-          return err(`--role must be one of user|assistant|any (got "${v}")`);
-        }
-        role = v;
-        break;
-      }
-      case "--since":
-      case "--until": {
-        const v = takeValue();
-        if (v === undefined) return err(`option ${key} requires a value`);
-        try {
-          const boundary = key === "--since" ? "since" : "until";
-          const ms = parseSinceUntil(v, boundary, now);
-          if (key === "--since") sinceMs = ms;
-          else untilMs = ms;
-        } catch (e) {
-          return err(e instanceof Error ? e.message : String(e));
-        }
-        break;
-      }
-      case "--cwd":
-        cwd = takeValue();
-        break;
-      case "--branch":
-        branch = takeValue();
-        break;
-      case "-C":
-      case "--context": {
-        const v = takeValue();
-        if (v === undefined) return err(`option ${key} requires a value`);
-        const n = Number(v);
-        if (!Number.isInteger(n) || n < 0 || n > 10_000) {
-          return err(`--context must be an integer in [0, 10000] (got "${v}")`);
-        }
-        context = n;
-        break;
-      }
-      case "--color": {
-        const v = takeValue();
-        if (v !== "always" && v !== "never" && v !== "auto") {
-          return err(`--color must be one of always|never|auto (got "${v}")`);
-        }
-        color = v;
-        break;
-      }
-      default:
-        return err(`unknown option: ${key}`);
-    }
+  let parsed: ReturnType<typeof parseConfiguredArgs>;
+  try {
+    parsed = parseConfiguredArgs(argv);
+  } catch (error) {
+    return err(error instanceof Error ? error.message : String(error));
   }
 
-  if (pattern === undefined) {
-    return err("missing search pattern");
+  const { positionals, values } = parsed;
+
+  if (values.help === true) return { kind: "help" };
+  if (values.version === true) return { kind: "version" };
+
+  const pattern = positionals[0];
+  if (pattern === undefined) return err("missing search pattern");
+  if (positionals[1] !== undefined) {
+    return err(`unexpected extra argument: "${positionals[1]}"`);
+  }
+
+  const roleValue = values.role;
+  if (
+    roleValue !== undefined &&
+    roleValue !== "user" &&
+    roleValue !== "assistant" &&
+    roleValue !== "any"
+  ) {
+    return err(`--role must be one of user|assistant|any (got "${roleValue}")`);
+  }
+  const role: RoleFilter = roleValue ?? "any";
+
+  let sinceMs: number | undefined;
+  let untilMs: number | undefined;
+  let context = 2;
+
+  try {
+    if (values.since !== undefined) {
+      sinceMs = parseSinceUntil(values.since, "since", now);
+    }
+    if (values.until !== undefined) {
+      untilMs = parseSinceUntil(values.until, "until", now);
+    }
+  } catch (error) {
+    return err(error instanceof Error ? error.message : String(error));
+  }
+
+  if (values.context !== undefined) {
+    if (values.context === "") {
+      return err('--context must be an integer in [0, 10000] (got "")');
+    }
+    const parsedContext = Number(values.context);
+    if (
+      !Number.isInteger(parsedContext) ||
+      parsedContext < 0 ||
+      parsedContext > 10_000
+    ) {
+      return err(
+        `--context must be an integer in [0, 10000] (got "${values.context}")`,
+      );
+    }
+    context = parsedContext;
+  }
+
+  const colorValue = values.color;
+  if (
+    colorValue !== undefined &&
+    colorValue !== "always" &&
+    colorValue !== "never" &&
+    colorValue !== "auto"
+  ) {
+    return err(
+      `--color must be one of always|never|auto (got "${colorValue}")`,
+    );
+  }
+  const color: ColorMode = colorValue ?? "auto";
+
+  if (sinceMs !== undefined && untilMs !== undefined && sinceMs > untilMs) {
+    return err("--since must not be after --until");
   }
 
   return {
     kind: "options",
     options: {
       pattern,
-      regex,
-      fixed,
-      ignoreCase,
-      root: root ?? defaultRoot(env, home),
+      regex: values.regex ?? false,
+      fixed: values.fixed ?? false,
+      ignoreCase: values["ignore-case"] ?? false,
+      root: values.root ?? defaultRoot(env, home),
       role,
       sinceMs,
       untilMs,
-      cwd,
-      branch,
-      includeMeta,
+      cwd: values.cwd,
+      branch: values.branch,
+      includeMeta: values["include-meta"] ?? false,
       context,
-      resume,
-      printResume,
-      json,
+      resume: values.resume ?? false,
+      printResume: values["print-resume"] ?? false,
+      json: values.json ?? false,
       color,
     },
   };

@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 
-import { parseArgs } from "../src/args.js";
+import { HELP, parseArgs } from "../src/args.js";
 
 const HOME = "/home/u";
 const ENV = {};
@@ -25,6 +25,20 @@ test("help and version", () => {
   expect(parse(["-h"]).kind).toBe("help");
   expect(parse(["--help"]).kind).toBe("help");
   expect(parse(["-V"]).kind).toBe("version");
+  expect(parse(["--help", "--nope"]).kind).toBe("help");
+  expect(parse(["--version", "--help"]).kind).toBe("version");
+  expect(parse(["-hV"]).kind).toBe("help");
+  expect(parse(["-Vh"]).kind).toBe("version");
+  expect(parse(["-eV", "--nope"]).kind).toBe("version");
+  expect(parse(["-hC"]).kind).toBe("help");
+  expect(parse(["p", "-Ch"])).toEqual({
+    kind: "error",
+    message: '--context must be an integer in [0, 10000] (got "h")',
+  });
+});
+
+test("help documents dash-prefixed option values", () => {
+  expect(HELP).toContain("--option=value");
 });
 
 test("boolean flags", () => {
@@ -35,6 +49,24 @@ test("boolean flags", () => {
     expect(r.options.ignoreCase).toBe(true);
     expect(r.options.includeMeta).toBe(true);
     expect(r.options.json).toBe(true);
+  }
+});
+
+test.each([
+  "--help",
+  "--version",
+  "--regex",
+  "--fixed",
+  "--ignore-case",
+  "--include-meta",
+  "--resume",
+  "--print-resume",
+  "--json",
+])("%s rejects an inline value", (flag) => {
+  const result = parse(["p", `${flag}=false`]);
+  expect(result.kind).toBe("error");
+  if (result.kind === "error") {
+    expect(result.message).toContain("does not take an argument");
   }
 });
 
@@ -59,8 +91,22 @@ test("--since relative duration", () => {
     expect(r.options.sinceMs).toBe(NOW - 7 * 86_400_000);
 });
 
+test("--since after --until errors", () => {
+  expect(parse(["p", "--since", "1d", "--until", "2d"])).toEqual({
+    kind: "error",
+    message: "--since must not be after --until",
+  });
+});
+
 test("--context must be an integer in [0, 10000]", () => {
-  expect(parse(["p", "--context", "-1"]).kind).toBe("error");
+  expect(parse(["p", "--context="])).toEqual({
+    kind: "error",
+    message: '--context must be an integer in [0, 10000] (got "")',
+  });
+  expect(parse(["p", "--context=-1"])).toEqual({
+    kind: "error",
+    message: '--context must be an integer in [0, 10000] (got "-1")',
+  });
   expect(parse(["p", "--context", "x"]).kind).toBe("error");
   expect(parse(["p", "--context", "10001"]).kind).toBe("error");
   expect(parse(["p", "-C", "0"]).kind).toBe("options");
@@ -85,6 +131,46 @@ test("-- stops flag parsing so a dash-leading pattern works", () => {
 
 test("missing value for a value-taking option errors", () => {
   expect(parse(["p", "--root"]).kind).toBe("error");
+});
+
+test.each([
+  "--root",
+  "--role",
+  "--since",
+  "--until",
+  "--cwd",
+  "--branch",
+  "-C",
+  "--context",
+  "--color",
+])("%s does not consume the next flag as its value", (option) => {
+  const result = parse(["p", option, "--json"]);
+  expect(result.kind).toBe("error");
+  if (result.kind === "error") {
+    expect(result.message).toContain("argument is ambiguous");
+  }
+});
+
+test.each([
+  ["--root", "-"],
+  ["--cwd", "-generated"],
+  ["--branch", "-wip"],
+])("%s accepts an inline dash-prefixed value", (option, value) => {
+  const result = parse(["p", `${option}=${value}`]);
+  expect(result.kind).toBe("options");
+  if (result.kind === "options") {
+    expect(result.options[option.slice(2)]).toBe(value);
+  }
+});
+
+test("grouped short boolean flags are supported", () => {
+  const result = parse(["p", "-eFi"]);
+  expect(result.kind).toBe("options");
+  if (result.kind === "options") {
+    expect(result.options.regex).toBe(true);
+    expect(result.options.fixed).toBe(true);
+    expect(result.options.ignoreCase).toBe(true);
+  }
 });
 
 test("extra positional argument errors", () => {
