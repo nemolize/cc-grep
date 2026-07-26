@@ -72,7 +72,7 @@ jobs:
 
       # Idempotent: a re-run after a partial failure (publish succeeded but the
       # Release step failed) skips the already-published version instead of
-      # dying on npm's republish block. prepublishOnly runs the build.
+      # dying on npm's republish block.
       - name: Publish to npm (Trusted Publishing / OIDC)
         run: |
           name="$(node -p "require('./package.json').name")"
