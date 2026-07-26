@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 
-import { parseArgs } from "../src/args.js";
+import { HELP, parseArgs } from "../src/args.js";
 
 const HOME = "/home/u";
 const ENV = {};
@@ -25,6 +25,12 @@ test("help and version", () => {
   expect(parse(["-h"]).kind).toBe("help");
   expect(parse(["--help"]).kind).toBe("help");
   expect(parse(["-V"]).kind).toBe("version");
+  expect(parse(["--help", "--nope"]).kind).toBe("help");
+  expect(parse(["--version", "--help"]).kind).toBe("version");
+});
+
+test("help documents dash-prefixed option values", () => {
+  expect(HELP).toContain("--option=value");
 });
 
 test("boolean flags", () => {
@@ -49,10 +55,11 @@ test.each([
   "--print-resume",
   "--json",
 ])("%s rejects an inline value", (flag) => {
-  expect(parse(["p", `${flag}=false`])).toEqual({
-    kind: "error",
-    message: `option ${flag} does not take a value`,
-  });
+  const result = parse(["p", `${flag}=false`]);
+  expect(result.kind).toBe("error");
+  if (result.kind === "error") {
+    expect(result.message).toContain("does not take an argument");
+  }
 });
 
 test("--key=value form", () => {
@@ -84,7 +91,11 @@ test("--since after --until errors", () => {
 });
 
 test("--context must be an integer in [0, 10000]", () => {
-  expect(parse(["p", "--context", "-1"])).toEqual({
+  expect(parse(["p", "--context="])).toEqual({
+    kind: "error",
+    message: '--context must be an integer in [0, 10000] (got "")',
+  });
+  expect(parse(["p", "--context=-1"])).toEqual({
     kind: "error",
     message: '--context must be an integer in [0, 10000] (got "-1")',
   });
@@ -125,21 +136,32 @@ test.each([
   "--context",
   "--color",
 ])("%s does not consume the next flag as its value", (option) => {
-  expect(parse(["p", option, "--json"])).toEqual({
-    kind: "error",
-    message: `option ${option} requires a value`,
-  });
+  const result = parse(["p", option, "--json"]);
+  expect(result.kind).toBe("error");
+  if (result.kind === "error") {
+    expect(result.message).toContain("argument is ambiguous");
+  }
 });
 
 test.each([
   ["--root", "-"],
   ["--cwd", "-generated"],
   ["--branch", "-wip"],
-])("%s accepts a separated dash-prefixed value", (option, value) => {
-  const result = parse(["p", option, value]);
+])("%s accepts an inline dash-prefixed value", (option, value) => {
+  const result = parse(["p", `${option}=${value}`]);
   expect(result.kind).toBe("options");
   if (result.kind === "options") {
     expect(result.options[option.slice(2)]).toBe(value);
+  }
+});
+
+test("grouped short boolean flags are supported", () => {
+  const result = parse(["p", "-eFi"]);
+  expect(result.kind).toBe("options");
+  if (result.kind === "options") {
+    expect(result.options.regex).toBe(true);
+    expect(result.options.fixed).toBe(true);
+    expect(result.options.ignoreCase).toBe(true);
   }
 });
 
