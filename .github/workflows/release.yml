@@ -71,17 +71,23 @@ jobs:
           latest_version=""
           if [[ "$version" != *-* ]]; then
             name="$(node -p "require('./package.json').name")"
-            # A package with no `latest` yet exits non-zero; the empty string is
-            # the "no previous release" path classify-release.mjs already takes.
-            latest_version="$(npm view "$name" dist-tags.latest 2>/dev/null || true)"
+            # Only E404 means "no latest yet" — the empty string classify-release.mjs
+            # reads as no previous release. Swallowing other errors here would
+            # classify a backport as `latest` and roll the dist-tag backwards.
+            if out="$(npm view "$name" dist-tags.latest 2>&1)"; then
+              latest_version="$out"
+            elif ! grep -q 'E404' <<<"$out"; then
+              echo "::error::npm view failed for $name dist-tags.latest: $out"
+              exit 1
+            fi
           fi
           node .github/scripts/classify-release.mjs \
             "$version" "$latest_version" >>"$GITHUB_OUTPUT"
 
       # Idempotent: a re-run after a partial failure (publish succeeded but the
       # Release step failed) skips the already-published version instead of
-      # dying on npm's republish block. Only E404 means unpublished — any other
-      # npm failure is transient and must not fall through to a publish attempt.
+      # dying on npm's republish block. Only E404 proves the version is absent;
+      # any other failure proves nothing and must fail rather than publish.
       - name: Publish to npm (Trusted Publishing / OIDC)
         run: |
           name="$(node -p "require('./package.json').name")"
@@ -97,8 +103,8 @@ jobs:
 
       # Idempotent + --verify-tag: never recreate a deleted tag off the default
       # branch (which would point the Release at code npm never published).
-      # Only "release not found" means absent — any other gh failure is
-      # transient and must not fall through to a create attempt.
+      # Only "release not found" proves the release is absent; any other
+      # failure proves nothing and must fail rather than create.
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
