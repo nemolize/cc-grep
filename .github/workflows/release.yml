@@ -71,30 +71,51 @@ jobs:
           latest_version=""
           if [[ "$version" != *-* ]]; then
             name="$(node -p "require('./package.json').name")"
-            latest_version="$(npm view "$name" dist-tags.latest)"
+            # Only E404 means "no latest yet" — the empty string classify-release.mjs
+            # reads as no previous release. Swallowing other errors here would
+            # classify a backport as `latest` and roll the dist-tag backwards.
+            if out="$(npm view "$name" dist-tags.latest 2>&1)"; then
+              latest_version="$out"
+            elif ! grep -q 'E404' <<<"$out"; then
+              echo "::error::npm view failed for $name dist-tags.latest: $out"
+              exit 1
+            fi
           fi
           node .github/scripts/classify-release.mjs \
             "$version" "$latest_version" >>"$GITHUB_OUTPUT"
 
       # Idempotent: a re-run after a partial failure (publish succeeded but the
       # Release step failed) skips the already-published version instead of
-      # dying on npm's republish block.
+      # dying on npm's republish block. Only E404 proves the version is absent;
+      # any other failure proves nothing and must fail rather than publish.
       - name: Publish to npm (Trusted Publishing / OIDC)
         run: |
           name="$(node -p "require('./package.json').name")"
-          if npm view "${name}@${GITHUB_REF_NAME#v}" version >/dev/null 2>&1; then
-            echo "${name}@${GITHUB_REF_NAME#v} already published — skipping"
-          else
+          spec="${name}@${GITHUB_REF_NAME#v}"
+          if err="$(npm view "$spec" version 2>&1 >/dev/null)"; then
+            echo "$spec already published — skipping"
+          elif grep -q 'E404' <<<"$err"; then
             pnpm publish --provenance --no-git-checks --tag "${{ steps.classify.outputs.npm_tag }}"
+          else
+            echo "::error::npm view failed for $spec: $err"
+            exit 1
           fi
 
       # Idempotent + --verify-tag: never recreate a deleted tag off the default
       # branch (which would point the Release at code npm never published).
+      # Only "release not found" proves the release is absent; any other
+      # failure proves nothing and must fail rather than create.
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
-            || gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+          if err="$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" 2>&1 >/dev/null)"; then
+            echo "$GITHUB_REF_NAME release already exists — skipping"
+          elif grep -qi 'release not found' <<<"$err"; then
+            gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
               --title "$GITHUB_REF_NAME" --generate-notes --verify-tag \
               ${{ steps.classify.outputs.github_release_flag }}
+          else
+            echo "::error::gh release view failed for $GITHUB_REF_NAME: $err"
+            exit 1
+          fi
