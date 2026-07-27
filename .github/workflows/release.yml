@@ -90,17 +90,23 @@ jobs:
       # ref, which checkout resolved to GITHUB_SHA by construction. Runs
       # before publish so a mismatch aborts while both mutations are pending.
       - name: Verify tag still points at this commit
+        env:
+          # Authenticate the query: anonymous git-over-HTTPS from shared runner
+          # IPs is subject to secondary rate limiting. Passed via GIT_CONFIG_*
+          # rather than `git -c` so the token never reaches argv.
+          GIT_CONFIG_COUNT: "1"
+          GIT_CONFIG_KEY_0: http.extraHeader
+          GIT_CONFIG_VALUE_0: "Authorization: Bearer ${{ github.token }}"
         run: |
           remote="https://github.com/${GITHUB_REPOSITORY}.git"
           # The trailing * matters: with an exact refspec git filters out the
           # ^{} peeled line, leaving only an annotated tag's object SHA. The
-          # glob also matches longer tag names, so awk pins the name exactly.
+          # glob also matches longer tag names, so awk pins the name exactly
+          # and prefers the peeled commit over the tag object.
           if ! out="$(git ls-remote --tags "$remote" "refs/tags/${GITHUB_REF_NAME}*" 2>&1)"; then
             echo "::error::git ls-remote failed for $GITHUB_REF_NAME: $out"
             exit 1
           fi
-          # Annotated tags resolve to a tag object; the ^{} line carries the
-          # commit, so prefer it when present.
           sha="$(awk -v r="refs/tags/${GITHUB_REF_NAME}" \
             '$2 == r"^{}" {peeled=$1} $2 == r {plain=$1} END {print (peeled != "" ? peeled : plain)}' <<<"$out")"
           if [ -z "$sha" ]; then
