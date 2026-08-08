@@ -47,9 +47,7 @@ function collect(node: unknown, out: string[], depth: number): void {
       collect(block["content"], out, depth + 1);
       return;
     case "tool_use":
-      // Serialize the tool input so `cc-grep` matches on e.g. Bash commands or
-      // file paths the assistant acted on.
-      if (block["input"] != null) out.push(safeStringify(block["input"]));
+      collectToolUse(block, out);
       return;
     case "image":
       return; // no text to search
@@ -60,9 +58,50 @@ function collect(node: unknown, out: string[], depth: number): void {
   }
 }
 
+/** Prefix identifying a tool-call header line in the output. */
+export const TOOL_MARK = "⚙";
+
+/**
+ * Values keep their real newlines so `-C N` shows a hit's neighbourhood rather
+ * than a whole heredoc.
+ */
+function collectToolUse(block: Record<string, unknown>, out: string[]): void {
+  const name = typeof block["name"] === "string" ? block["name"] : "";
+  if (name !== "") out.push(`${TOOL_MARK} ${name}`);
+
+  const input = block["input"];
+  if (isRecord(input)) {
+    for (const [key, value] of Object.entries(input)) {
+      out.push(`${key}: ${renderValue(value, 0)}`);
+    }
+  } else if (input != null) {
+    out.push(renderValue(input, 0));
+  }
+}
+
+/**
+ * Nested strings are spliced in raw rather than JSON-escaped, so a value's own
+ * newlines become real lines while a literal backslash-n in the data stays
+ * literal — post-unescaping a serialized blob cannot tell the two apart.
+ */
+function renderValue(value: unknown, depth: number): string {
+  if (typeof value === "string") return value;
+  if (depth > MAX_DEPTH) return safeStringify(value);
+  if (Array.isArray(value)) {
+    return `[${value.map((v) => renderValue(v, depth + 1)).join(", ")}]`;
+  }
+  if (isRecord(value)) {
+    const fields = Object.entries(value).map(
+      ([k, v]) => `${k}: ${renderValue(v, depth + 1)}`,
+    );
+    return `{${fields.join(", ")}}`;
+  }
+  return safeStringify(value);
+}
+
 function safeStringify(value: unknown): string {
   try {
-    return JSON.stringify(value);
+    return JSON.stringify(value) ?? "";
   } catch {
     return "";
   }

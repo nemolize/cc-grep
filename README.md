@@ -91,6 +91,25 @@ malformed JSON are skipped rather than crashing the scan, since the transcript
 schema is undocumented and drifts. Searchable text is pulled from message text,
 thinking blocks, tool inputs (e.g. the Bash command run), and tool results.
 
+A tool call is rendered as a `⚙ <tool name>` header followed by one
+`key: value` line per argument, with multi-line values keeping their real line
+breaks — so a hit inside a long heredoc shows its own neighbourhood rather than
+the whole argument:
+
+```
+~/proj-a  2026-07-30 22:59  22c88264  assistant
+  │ ⚙ Bash
+  │ >> command: gh pr create --draft --title "…"
+  │ …following line of the heredoc…
+```
+
+The `⚙` header is always shown for a matched tool call, even when the match
+lands deep enough in an argument that the header falls outside `-C N`.
+
+These rendered lines are also the lines matched against, so a pattern is tested
+per displayed line: one spanning two arguments won't match, and `command:`
+matches every Bash call.
+
 The scan is a plain linear read — fast enough (sub-second for a
 low-thousands-of-sessions corpus) that no index is needed.
 
