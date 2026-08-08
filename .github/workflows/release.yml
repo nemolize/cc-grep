@@ -91,26 +91,33 @@ jobs:
       # before publish so a mismatch aborts while both mutations are pending.
       - name: Verify tag still points at this commit
         env:
-          # Authenticate the query: anonymous git-over-HTTPS from shared runner
-          # IPs is subject to secondary rate limiting. Passed via GIT_CONFIG_*
-          # rather than `git -c` so the token never reaches argv.
-          GIT_CONFIG_COUNT: "1"
-          GIT_CONFIG_KEY_0: http.extraHeader
-          GIT_CONFIG_VALUE_0: "Authorization: Bearer ${{ github.token }}"
+          GH_TOKEN: ${{ github.token }}
         run: |
-          remote="https://github.com/${GITHUB_REPOSITORY}.git"
-          # The trailing * matters: with an exact refspec git filters out the
-          # ^{} peeled line, leaving only an annotated tag's object SHA. The
-          # glob also matches longer tag names, so awk pins the name exactly
-          # and prefers the peeled commit over the tag object.
-          if ! out="$(git ls-remote --tags "$remote" "refs/tags/${GITHUB_REF_NAME}*" 2>&1)"; then
-            echo "::error::git ls-remote failed for $GITHUB_REF_NAME: $out"
+          # `gh` carries the token itself; git-over-HTTPS rejects `Bearer` auth,
+          # so `git ls-remote` cannot be authenticated this way.
+          endpoint="repos/${GITHUB_REPOSITORY}/git/ref/tags/${GITHUB_REF_NAME}"
+          if ! out="$(gh api "$endpoint" --jq '[.object.sha, .object.type] | @tsv' 2>&1)"; then
+            # A 404 here is indistinguishable from an unreadable repository —
+            # same body either way — so report both rather than assert one.
+            if grep -q 'Not Found' <<<"$out"; then
+              echo "::error::tag $GITHUB_REF_NAME not found (deleted, or the repository is unreadable with this token)"
+            else
+              echo "::error::gh api failed for $GITHUB_REF_NAME: $out"
+            fi
             exit 1
           fi
-          sha="$(awk -v r="refs/tags/${GITHUB_REF_NAME}" \
-            '$2 == r"^{}" {peeled=$1} $2 == r {plain=$1} END {print (peeled != "" ? peeled : plain)}' <<<"$out")"
+          IFS=$'\t' read -r sha type <<<"$out"
+          # An annotated tag resolves to its tag object; peel it to the commit.
+          if [ "$type" = "tag" ]; then
+            if ! out="$(gh api "repos/${GITHUB_REPOSITORY}/git/tags/${sha}" --jq .object.sha 2>&1)"; then
+              echo "::error::gh api failed to peel $GITHUB_REF_NAME: $out"
+              exit 1
+            fi
+            sha="$out"
+          fi
+          # An API response missing `.object.sha` yields an empty field here.
           if [ -z "$sha" ]; then
-            echo "::error::tag $GITHUB_REF_NAME no longer exists on the remote"
+            echo "::error::could not resolve a commit for tag $GITHUB_REF_NAME"
             exit 1
           fi
           if [ "$sha" != "$GITHUB_SHA" ]; then
