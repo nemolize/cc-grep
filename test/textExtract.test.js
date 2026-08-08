@@ -24,12 +24,98 @@ test("thinking block is searchable", () => {
   ]);
 });
 
-test("tool_use serializes input to JSON", () => {
+test("tool_use is labelled with its tool name and itemised per field", () => {
   const lines = extractTextLines([
-    { type: "tool_use", name: "Bash", input: { command: "ls -la" } },
+    {
+      type: "tool_use",
+      name: "Bash",
+      input: { command: "ls -la", description: "List files" },
+    },
   ]);
-  expect(lines.length).toBe(1);
-  expect(lines[0]).toMatch(/ls -la/);
+  expect(lines).toEqual([
+    "⚙ Bash",
+    "command: ls -la",
+    "description: List files",
+  ]);
+});
+
+test("tool_use multi-line string value keeps real line breaks", () => {
+  const lines = extractTextLines([
+    {
+      type: "tool_use",
+      name: "Bash",
+      input: { command: "cat <<'EOF'\nneedle here\nEOF" },
+    },
+  ]);
+  expect(lines).toEqual([
+    "⚙ Bash",
+    "command: cat <<'EOF'",
+    "needle here",
+    "EOF",
+  ]);
+});
+
+test("tool_use nested value keeps structure with real newlines", () => {
+  const lines = extractTextLines([
+    { type: "tool_use", name: "Edit", input: { edits: ["a\nb"] } },
+  ]);
+  expect(lines).toEqual(["⚙ Edit", "edits: [a", "b]"]);
+});
+
+test("tool_use nested object renders as key: value pairs", () => {
+  const lines = extractTextLines([
+    { type: "tool_use", name: "Edit", input: { edit: { path: "/tmp/x" } } },
+  ]);
+  expect(lines).toEqual(["⚙ Edit", "edit: {path: /tmp/x}"]);
+});
+
+test("a literal backslash-n in nested data is not turned into a line break", () => {
+  const lines = extractTextLines([
+    {
+      type: "tool_use",
+      name: "MultiEdit",
+      input: { edits: [{ old_string: String.raw`printf("\n");` }] },
+    },
+  ]);
+  expect(lines).toEqual([
+    "⚙ MultiEdit",
+    String.raw`edits: [{old_string: printf("\n");}]`,
+  ]);
+});
+
+test("pathologically nested input degrades instead of throwing", () => {
+  let deep = {};
+  let cursor = deep;
+  for (let i = 0; i < 200000; i++) {
+    cursor.n = {};
+    cursor = cursor.n;
+  }
+  expect(() =>
+    extractTextLines([{ type: "tool_use", name: "X", input: { deep } }]),
+  ).not.toThrow();
+});
+
+test("tool_use non-string scalars are rendered", () => {
+  const lines = extractTextLines([
+    { type: "tool_use", name: "Bash", input: { timeout: 180000, bg: true } },
+  ]);
+  expect(lines).toEqual(["⚙ Bash", "timeout: 180000", "bg: true"]);
+});
+
+test("tool_use with a non-object input still yields the value", () => {
+  expect(
+    extractTextLines([{ type: "tool_use", name: "Bash", input: "raw arg" }]),
+  ).toEqual(["⚙ Bash", "raw arg"]);
+});
+
+test("tool_use without a name still itemises its input", () => {
+  expect(
+    extractTextLines([{ type: "tool_use", input: { path: "/tmp/x" } }]),
+  ).toEqual(["path: /tmp/x"]);
+});
+
+test("tool_use without name or input yields nothing", () => {
+  expect(extractTextLines([{ type: "tool_use", name: "" }])).toEqual([]);
 });
 
 test("tool_result with string content", () => {

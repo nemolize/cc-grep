@@ -1,4 +1,5 @@
 import { buildMatcher } from "./matcher.js";
+import { TOOL_MARK } from "./textExtract.js";
 import type { ColorMode, Hit, Options } from "./types.js";
 
 const RESET = "\x1b[0m";
@@ -57,6 +58,20 @@ function highlight(
 }
 
 /**
+ * Index of the `⚙ <tool>` header owning `idx` — a match deep inside a long
+ * argument would otherwise show with no sign of which tool ran.
+ */
+function toolHeaderIndex(lines: string[], idx: number): number | undefined {
+  for (let i = idx; i >= 0; i--) {
+    const line = lines[i] ?? "";
+    if (line.startsWith(TOOL_MARK)) return i;
+    // A blank line ends the argument block, so prose can't borrow a header.
+    if (i < idx && line === "") return undefined;
+  }
+  return undefined;
+}
+
+/**
  * Render one hit as a human-readable block: a header line (cwd / timestamp /
  * session / role) followed by the matched lines with ±context, matches
  * highlighted and prefixed with `>>`.
@@ -83,6 +98,8 @@ export function formatHit(
     for (let i = idx - opts.context; i <= idx + opts.context; i++) {
       if (i >= 0 && i < turn.textLines.length) show.add(i);
     }
+    const header = toolHeaderIndex(turn.textLines, idx);
+    if (header !== undefined) show.add(header);
   }
   const ordered = [...show].sort((a, b) => a - b);
 

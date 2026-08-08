@@ -1,6 +1,7 @@
 import { expect, test } from "vitest";
 
 import {
+  formatHit,
   formatHitJson,
   formatTimestamp,
   resumeCommand,
@@ -65,4 +66,40 @@ test("resumeCommand is undefined without a session id", () => {
   const h = hit();
   h.turn.sessionId = undefined;
   expect(resumeCommand(h)).toBe(undefined);
+});
+
+const opts = { context: 2, pattern: "x", regex: false, fixed: true };
+
+test("a tool header out of context range is pulled in", () => {
+  const h = hit();
+  h.turn.textLines = [
+    "⚙ Bash",
+    "command: line a",
+    "b",
+    "c",
+    "d",
+    "deep match",
+    "e",
+  ];
+  h.matchedLineIndices = [5];
+  const out = formatHit(
+    h,
+    { ...opts, pattern: "deep match" },
+    "/home/u",
+    false,
+  );
+  expect(out).toMatch(/⚙ Bash/);
+});
+
+test("prose does not borrow an earlier call's tool header", () => {
+  const h = hit();
+  h.turn.textLines = ["⚙ Bash", "command: ls", "", "prose match", "tail"];
+  h.matchedLineIndices = [3];
+  const out = formatHit(
+    h,
+    { ...opts, pattern: "prose match" },
+    "/home/u",
+    false,
+  );
+  expect(out).not.toMatch(/⚙ Bash/);
 });
