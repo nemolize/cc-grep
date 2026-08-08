@@ -93,11 +93,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # `gh` carries the token itself; authenticating git-over-HTTPS needs an
-          # `Authorization: Basic` header (GitHub rejects `Bearer`, then git
-          # prompts for a username and dies on the non-interactive runner).
-          ref="repos/${GITHUB_REPOSITORY}/git/ref/tags/${GITHUB_REF_NAME}"
-          if ! out="$(gh api "$ref" --jq '[.object.sha, .object.type] | @tsv' 2>&1)"; then
+          # `gh` carries the token itself; git-over-HTTPS rejects `Bearer` auth,
+          # so `git ls-remote` cannot be authenticated this way.
+          endpoint="repos/${GITHUB_REPOSITORY}/git/ref/tags/${GITHUB_REF_NAME}"
+          if ! out="$(gh api "$endpoint" --jq '[.object.sha, .object.type] | @tsv' 2>&1)"; then
             # A 404 here is indistinguishable from an unreadable repository —
             # same body either way — so report both rather than assert one.
             if grep -q 'Not Found' <<<"$out"; then
@@ -110,11 +109,13 @@ jobs:
           IFS=$'\t' read -r sha type <<<"$out"
           # An annotated tag resolves to its tag object; peel it to the commit.
           if [ "$type" = "tag" ]; then
-            if ! sha="$(gh api "repos/${GITHUB_REPOSITORY}/git/tags/${sha}" --jq .object.sha 2>&1)"; then
-              echo "::error::gh api failed to peel $GITHUB_REF_NAME: $sha"
+            if ! out="$(gh api "repos/${GITHUB_REPOSITORY}/git/tags/${sha}" --jq .object.sha 2>&1)"; then
+              echo "::error::gh api failed to peel $GITHUB_REF_NAME: $out"
               exit 1
             fi
+            sha="$out"
           fi
+          # An API response missing `.object.sha` yields an empty field here.
           if [ -z "$sha" ]; then
             echo "::error::could not resolve a commit for tag $GITHUB_REF_NAME"
             exit 1
