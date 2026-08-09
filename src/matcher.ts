@@ -4,7 +4,7 @@ export interface Matcher {
   /** True if the line contains at least one match. */
   test(line: string): boolean;
   /** All [start, end) match ranges in the line, for highlighting. */
-  ranges(line: string): Array<[number, number]>;
+  ranges(line: string): [number, number][];
 }
 
 // JS has no regex execution timeout, so a catastrophic-backtracking pattern on
@@ -40,12 +40,12 @@ export function buildMatcher(opts: Options): Matcher {
       re.lastIndex = 0;
       return re.test(line);
     },
-    ranges(line: string): Array<[number, number]> {
+    ranges(line: string): [number, number][] {
       if (line.length > MAX_MATCH_LINE_BYTES) return [];
-      const out: Array<[number, number]> = [];
+      const out: [number, number][] = [];
       re.lastIndex = 0;
       for (const m of line.matchAll(re)) {
-        const start = m.index ?? 0;
+        const start = m.index;
         // Guard against zero-width matches (e.g. `--regex ''`) looping forever.
         const end = start + (m[0].length || 1);
         out.push([start, end]);

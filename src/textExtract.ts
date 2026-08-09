@@ -101,6 +101,9 @@ function renderValue(value: unknown, depth: number): string {
 
 function safeStringify(value: unknown): string {
   try {
+    // The lib types this as `string`, but it returns `undefined` for
+    // `undefined` and any value that serialises to nothing.
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
     return JSON.stringify(value) ?? "";
   } catch {
     return "";

@@ -21,11 +21,10 @@ export function passesFilters(turn: Turn, opts: Options): boolean {
   }
 
   if (opts.cwd !== undefined) {
-    if (turn.cwd === undefined || !turn.cwd.includes(opts.cwd)) return false;
+    if (turn.cwd?.includes(opts.cwd) !== true) return false;
   }
   if (opts.branch !== undefined) {
-    if (turn.gitBranch === undefined || !turn.gitBranch.includes(opts.branch))
-      return false;
+    if (turn.gitBranch?.includes(opts.branch) !== true) return false;
   }
 
   return true;
