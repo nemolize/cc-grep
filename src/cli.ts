@@ -79,6 +79,8 @@ async function main(): Promise<number> {
     return 1;
   }
 
+  // Typed `boolean`, but Node leaves it `undefined` when stdout is not a TTY.
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-boolean-literal-compare
   const color = shouldColor(opts.color, process.stdout.isTTY === true);
 
   let count = 0;
@@ -88,7 +90,7 @@ async function main(): Promise<number> {
   try {
     for await (const hit of search(opts)) {
       count++;
-      if (!firstHit) firstHit = hit;
+      firstHit ??= hit;
 
       if (opts.json) {
         await writeStdout(formatHitJson(hit, home) + "\n");
@@ -130,9 +132,9 @@ main()
   .then((code) => {
     process.exitCode = code;
   })
-  .catch((err) => {
+  .catch((err: unknown) => {
     process.stderr.write(
-      `cc-grep: unexpected error: ${err instanceof Error ? err.stack : String(err)}\n`,
+      `cc-grep: unexpected error: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}\n`,
     );
     process.exitCode = 2;
   });

@@ -28,7 +28,7 @@ export function formatTimestamp(ms: number | undefined): string {
   const d = new Date(ms);
   const p = (n: number) => String(n).padStart(2, "0");
   return (
-    `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ` +
+    `${String(d.getFullYear())}-${p(d.getMonth() + 1)}-${p(d.getDate())} ` +
     `${p(d.getHours())}:${p(d.getMinutes())}`
   );
 }
@@ -40,7 +40,7 @@ function shortSession(id: string | undefined): string {
 
 function highlight(
   line: string,
-  ranges: Array<[number, number]>,
+  ranges: [number, number][],
   color: boolean,
 ): string {
   if (!color || ranges.length === 0) return line;

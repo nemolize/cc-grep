@@ -9,10 +9,20 @@ import tseslint from "typescript-eslint";
 
 export default tseslint.config(
   includeIgnoreFile(fileURLToPath(new URL(".gitignore", import.meta.url))),
+  // Warnings do not fail `eslint .`, so a disable directive that no longer
+  // suppresses anything would otherwise survive CI indefinitely.
+  { linterOptions: { reportUnusedDisableDirectives: "error" } },
   js.configs.recommended,
-  tseslint.configs.strict,
+  tseslint.configs.strictTypeChecked,
+  tseslint.configs.stylisticTypeChecked,
   {
-    languageOptions: { globals: { ...globals.node } },
+    languageOptions: {
+      globals: { ...globals.node },
+      parserOptions: {
+        project: ["./tsconfig.json", "./tsconfig.node.json"],
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
     plugins: {
       "simple-import-sort": simpleImportSort,
       "unused-imports": unusedImports,
@@ -35,10 +45,15 @@ export default tseslint.config(
   },
   {
     files: ["src/**/*.ts"],
-    languageOptions: { parserOptions: { project: true } },
     rules: {
       "@typescript-eslint/strict-boolean-expressions": "error",
     },
+  },
+  // tsconfig.json includes only src, so type-aware rules have no program to run
+  // against for JavaScript and the parser errors on any file it reaches.
+  {
+    files: ["**/*.{js,mjs,cjs}"],
+    extends: [tseslint.configs.disableTypeChecked],
   },
   {
     files: ["**/*.{test,spec}.js"],

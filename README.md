@@ -130,6 +130,25 @@ pnpm start <pattern> [options]   # e.g. `pnpm start -h`, `pnpm start "auth flow"
 `pnpm start` runs the built output, so re-run `pnpm run build` after each
 source change.
 
+### Checks
+
+```
+pnpm run lint            # eslint, prettier, type-check and knip, in parallel
+pnpm run fix             # apply the eslint and prettier fixes
+pnpm run test            # unit tests
+pnpm run test:coverage   # unit tests with a coverage report
+```
+
+`pnpm run lint` uses `--continue-on-error`, so one failing check does not hide
+the others. Coverage thresholds live in `vitest.config.ts` with `autoUpdate`
+enabled: they rise as coverage improves and never fall on their own.
+
+### Git hooks
+
+`hk` installs them from `hk.pkl` on `pnpm install`. `pre-commit` runs eslint and
+prettier over the staged files; `post-merge` reinstalls dependencies or
+toolchain versions when `pnpm-lock.yaml` or `mise.toml` changed in the merge.
+
 ## License
 
 MIT
