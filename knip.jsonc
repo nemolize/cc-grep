@@ -3,6 +3,4 @@
   // src/cli.ts is inferred from the `bin` field, so it is not listed here.
   "entry": ["test/**/*.test.js", ".github/scripts/*.mjs"],
   "project": ["src/**/*.ts", "test/**/*.js", ".github/scripts/*.mjs"],
-  // hk comes from mise, not from node_modules.
-  "ignoreBinaries": ["hk"],
 }
