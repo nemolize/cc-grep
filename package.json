@@ -48,7 +48,7 @@
     "fix": "run-s --continue-on-error fix:eslint fix:prettier",
     "fix:eslint": "eslint . --fix",
     "fix:prettier": "prettier --write .",
-    "prepare": "hk install"
+    "prepare": "lefthook install"
   },
   "devDependencies": {
     "@eslint/compat": "^2.1.0",
@@ -60,6 +60,7 @@
     "eslint-plugin-unused-imports": "^4.4.1",
     "globals": "^17.7.0",
     "knip": "^6.32.0",
+    "lefthook": "^2.1.10",
     "npm-run-all2": "^9.0.3",
     "prettier": "^3.9.5",
     "semver": "^7.8.5",
