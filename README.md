@@ -145,9 +145,12 @@ enabled: they rise as coverage improves and never fall on their own.
 
 ### Git hooks
 
-`hk` installs them from `hk.pkl` on `pnpm install`. `pre-commit` runs eslint and
+`lefthook` installs them on `pnpm install`. `pre-commit` runs eslint and
 prettier over the staged files; `post-merge` reinstalls dependencies or
 toolchain versions when `pnpm-lock.yaml` or `mise.toml` changed in the merge.
+
+`lefthook.yml` only points at [`nemolize/lefthook-configs`](https://github.com/nemolize/lefthook-configs),
+which holds the steps themselves and is shared across repositories.
 
 ## License
 
