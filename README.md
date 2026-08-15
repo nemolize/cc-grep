@@ -21,6 +21,7 @@ Read-only. Nothing ever leaves your machine.
 ```
 npx @nemolize/cc-grep <pattern> [options]
 cc-grep <pattern> [options]              # once installed globally
+cc-grep --session <id> [pattern]         # read one session as a conversation
 ```
 
 ```
@@ -45,6 +46,8 @@ $ npx @nemolize/cc-grep "auth flow"
 
 ### Filters
 
+- `--session <id>` — dump one session as a conversation instead of searching;
+  see [Reading one session](#reading-one-session).
 - `--role <user|assistant|any>` — restrict by turn role (default: `any`).
 - `--since <dur|date>` / `--until <dur|date>` — time window. Accepts a relative
   duration (`7d`, `2h`, `30m`, `1w`) or an absolute date (`2026-06-01`).
@@ -63,6 +66,36 @@ $ npx @nemolize/cc-grep "auth flow"
 - `--print-resume` — print the resume command for every hit. Use while
   browsing, so any hit can be jumped into.
 
+## Reading one session
+
+Finding a past decision is a two-step job: search narrows to a session, then you
+read that session to recover the reasoning. `--session` covers the second step —
+it prints a session as a conversation instead of searching across all of them:
+
+```
+$ cc-grep --session a1b2c3d4 --role user
+session a1b2c3d4-5e6f-7890-abcd-ef1234567890  ~/proj-a  (main)
+
+user  2026-07-10 21:30
+  │ why did we drop the retry wrapper here?
+
+user  2026-07-10 21:34
+  │ …
+```
+
+- The id can be a prefix — the 8-char form the search output prints is enough.
+  A prefix matching several sessions dumps each and warns on stderr, so widen it.
+- The pattern is optional. Give one anyway to keep only the turns that match it,
+  with the match highlighted; the whole turn is shown either way, since `-C N`
+  windows are for scanning search hits, not for reading a conversation.
+- The other filters compose: `--role user` shows just the asks, `--since` trims
+  a long session to its recent stretch.
+- `--json` emits the same per-hit objects as a search, so a dump pipes to `jq`
+  the same way.
+
+`claude --resume` also reopens a session, but interactively and at the cost of a
+context window. Reading a past conversation as text is a different job.
+
 ## Recipes
 
 ```sh
@@ -77,6 +110,9 @@ cc-grep "X" --cwd myrepo
 
 # List the unique sessions that mention X
 cc-grep "X" --json | jq -r .sessionId | sort -u
+
+# Find the session that discussed X, then read how it started
+cc-grep "X" --json | jq -r .sessionId | head -1 | xargs -I{} cc-grep --session {} --role user
 ```
 
 ## Exit status

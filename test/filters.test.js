@@ -93,3 +93,17 @@ test("branch substring; unknown branch excluded when filter active", () => {
     passesFilters(turn({ gitBranch: undefined }), opts({ branch: "feat" })),
   ).toBe(false);
 });
+
+test("session matches on a prefix, not a substring", () => {
+  const t = turn({ sessionId: "abcdef12-3456" });
+  expect(passesFilters(t, opts({ session: "abcdef12" }))).toBe(true);
+  expect(passesFilters(t, opts({ session: "abcdef12-3456" }))).toBe(true);
+  expect(passesFilters(t, opts({ session: "def12" }))).toBe(false);
+  expect(passesFilters(t, opts({ session: "abcdef13" }))).toBe(false);
+});
+
+test("unknown session id excluded when --session is active", () => {
+  expect(
+    passesFilters(turn({ sessionId: undefined }), opts({ session: "abc" })),
+  ).toBe(false);
+});

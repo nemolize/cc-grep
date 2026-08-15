@@ -86,3 +86,16 @@ test("lines above the size cap are skipped, not evaluated (ReDoS guard)", () => 
   expect(m.ranges(huge)).toEqual([]);
   expect(Date.now() - start).toBeLessThan(1000);
 });
+
+test("an empty pattern matches every line and highlights none", () => {
+  const m = buildMatcher(opts({ pattern: "" }));
+  expect(m.test("anything")).toBe(true);
+  expect(m.test("")).toBe(true);
+  expect(m.ranges("anything")).toEqual([]);
+});
+
+test("an empty pattern stays match-everything under --regex", () => {
+  const m = buildMatcher(opts({ pattern: "", regex: true }));
+  expect(m.test("anything")).toBe(true);
+  expect(m.ranges("anything")).toEqual([]);
+});

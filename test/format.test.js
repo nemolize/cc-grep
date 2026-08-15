@@ -1,6 +1,8 @@
 import { expect, test } from "vitest";
 
 import {
+  formatDumpBanner,
+  formatDumpTurn,
   formatHit,
   formatHitJson,
   formatTimestamp,
@@ -89,6 +91,56 @@ test("a tool header out of context range is pulled in", () => {
     false,
   );
   expect(out).toMatch(/⚙ Bash/);
+});
+
+test("dump banner carries session, cwd and branch once", () => {
+  const out = formatDumpBanner(hit().turn, "/home/u", false);
+  expect(out).toBe("session abcdef12-3456  ~/proj  (main)");
+});
+
+test("dump banner omits the branch when unknown", () => {
+  const t = hit().turn;
+  t.gitBranch = undefined;
+  expect(formatDumpBanner(t, "/home/u", false)).toBe(
+    "session abcdef12-3456  ~/proj",
+  );
+});
+
+test("dump turn prints every line, not just the matched window", () => {
+  const h = hit();
+  h.turn.textLines = ["a", "b", "c", "d", "e", "f", "g"];
+  h.matchedLineIndices = [3];
+  const out = formatDumpTurn(h, { ...opts, context: 0, pattern: "d" }, false);
+  const lines = out.split("\n");
+  // Header timestamp renders in local time, so assert its shape, not a literal.
+  expect(lines[0]).toMatch(/^user {2}\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
+  expect(lines.slice(1)).toEqual([
+    "  │ a",
+    "  │ b",
+    "  │ c",
+    "  │ d",
+    "  │ e",
+    "  │ f",
+    "  │ g",
+  ]);
+});
+
+test("dump turn highlights only the matched line, by index", () => {
+  const h = hit();
+  h.turn.textLines = ["dup", "dup"];
+  h.matchedLineIndices = [1];
+  const out = formatDumpTurn(h, { ...opts, pattern: "dup" }, true);
+  const lines = out.split("\n");
+  expect(lines[1]).toBe("  │ dup");
+  expect(lines[2]).toContain("\x1b[1;31m");
+});
+
+test("a patternless dump highlights nothing", () => {
+  const h = hit();
+  h.turn.textLines = ["a", "b"];
+  h.matchedLineIndices = [0, 1];
+  const out = formatDumpTurn(h, { ...opts, pattern: "" }, true);
+  expect(out).not.toContain("\x1b[1;31m");
 });
 
 test("prose does not borrow an earlier call's tool header", () => {

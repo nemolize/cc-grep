@@ -6,6 +6,8 @@ import { fileURLToPath } from "node:url";
 
 import { HELP, parseArgs } from "./args.js";
 import {
+  formatDumpBanner,
+  formatDumpTurn,
   formatHit,
   formatHitJson,
   resumeCommand,
@@ -86,6 +88,8 @@ async function main(): Promise<number> {
   let count = 0;
   let firstHit: Hit | undefined;
   const resumeLines: string[] = [];
+  const dumping = opts.session !== undefined;
+  const dumpedSessions = new Set<string>();
 
   try {
     for await (const hit of search(opts)) {
@@ -94,6 +98,16 @@ async function main(): Promise<number> {
 
       if (opts.json) {
         await writeStdout(formatHitJson(hit, home) + "\n");
+      } else if (dumping) {
+        const id = hit.turn.sessionId ?? "?";
+        if (!dumpedSessions.has(id)) {
+          dumpedSessions.add(id);
+          const banner = formatDumpBanner(hit.turn, home, color);
+          await writeStdout(
+            (dumpedSessions.size > 1 ? "\n" : "") + banner + "\n\n",
+          );
+        }
+        await writeStdout(formatDumpTurn(hit, opts, color) + "\n\n");
       } else {
         await writeStdout(formatHit(hit, opts, home, color) + "\n\n");
       }
@@ -109,6 +123,20 @@ async function main(): Promise<number> {
       `cc-grep: ${err instanceof Error ? err.message : String(err)}\n`,
     );
     return 2;
+  }
+
+  // A short prefix can select more than one session; the dump would otherwise
+  // read as one conversation with unexplained jumps.
+  if (dumping && dumpedSessions.size > 1) {
+    process.stderr.write(
+      `cc-grep: "${opts.session ?? ""}" matched ${String(dumpedSessions.size)} sessions — ` +
+        `pass a longer prefix to dump just one\n`,
+    );
+  }
+  if (dumping && count === 0) {
+    process.stderr.write(
+      `cc-grep: no session matching "${opts.session ?? ""}"\n`,
+    );
   }
 
   if (!opts.json) {

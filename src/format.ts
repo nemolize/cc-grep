@@ -1,6 +1,6 @@
 import { buildMatcher } from "./matcher.js";
 import { TOOL_MARK } from "./textExtract.js";
-import type { ColorMode, Hit, Options } from "./types.js";
+import type { ColorMode, Hit, Options, Turn } from "./types.js";
 
 const RESET = "\x1b[0m";
 const BOLD_RED = "\x1b[1;31m";
@@ -112,6 +112,56 @@ export function formatHit(
     const dim = color ? DIM + raw + RESET : raw;
     return `  │ ${dim}`;
   });
+
+  return [header, ...body].join("\n");
+}
+
+/**
+ * Banner printed once above a `--session` dump, carrying the per-session
+ * metadata that `formatHit` repeats on every hit.
+ */
+export function formatDumpBanner(
+  turn: Turn,
+  home: string,
+  color: boolean,
+): string {
+  const id = turn.sessionId ?? "?";
+  return (
+    (color ? CYAN : "") +
+    `session ${id}  ${shortenPath(turn.cwd, home)}` +
+    (turn.gitBranch === undefined ? "" : `  (${turn.gitBranch})`) +
+    (color ? RESET : "")
+  );
+}
+
+/**
+ * Render one turn of a `--session` dump: a `role  timestamp` header over the
+ * turn's full text. Unlike `formatHit` this never elides — reading a past
+ * conversation is the point, so context windows do not apply — but a pattern
+ * given alongside `--session` still highlights.
+ */
+export function formatDumpTurn(
+  hit: Hit,
+  opts: Options,
+  color: boolean,
+): string {
+  const { turn } = hit;
+  const header =
+    (color ? CYAN : "") +
+    `${turn.role}  ${formatTimestamp(turn.timestampMs)}` +
+    (color ? RESET : "");
+
+  const matcher = buildMatcher(opts);
+  const matched = new Set(hit.matchedLineIndices);
+  // An empty pattern marks every line matched; highlighting all of them is
+  // noise, so only a real pattern lights up.
+  const highlighting = opts.pattern !== "";
+
+  const body = turn.textLines.map((raw, i) =>
+    highlighting && matched.has(i)
+      ? `  │ ${highlight(raw, matcher.ranges(raw), color)}`
+      : `  │ ${raw}`,
+  );
 
   return [header, ...body].join("\n");
 }

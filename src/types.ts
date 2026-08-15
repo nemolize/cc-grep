@@ -30,7 +30,10 @@ export type RoleFilter = "user" | "assistant" | "any";
 export type ColorMode = "always" | "never" | "auto";
 
 export interface Options {
+  /** Empty when `--session` is given without a pattern: every turn is a hit. */
   pattern: string;
+  /** Session id (or a unique prefix) to dump as a conversation. */
+  session?: string | undefined;
   regex: boolean;
   fixed: boolean;
   root: string;

@@ -99,6 +99,32 @@ test("--cwd substring restricts by working directory", async () => {
   });
 });
 
+test("--session with no pattern yields every turn of that session", async () => {
+  await corpus(async (root) => {
+    const hits = await collect(opts(root, { pattern: "", session: "nomatch" }));
+    expect(hits.length).toBe(1);
+    expect(hits[0].turn.sessionId).toBe("nomatch");
+    // Every line is a match, so the dump renders the whole turn.
+    expect(hits[0].matchedLineIndices).toEqual([0]);
+  });
+});
+
+test("--session with a pattern keeps search semantics inside the session", async () => {
+  await corpus(async (root) => {
+    const hits = await collect(opts(root, { session: "nomatch" }));
+    expect(hits.length).toBe(0);
+  });
+});
+
+test("--session composes with --role", async () => {
+  await corpus(async (root) => {
+    const hits = await collect(
+      opts(root, { pattern: "", session: "o", role: "user" }),
+    );
+    expect(hits.map((h) => h.turn.sessionId)).toEqual(["old"]);
+  });
+});
+
 test("empty root yields no hits, no throw", async () => {
   const hits = await collect(opts("/no/such/dir", {}));
   expect(hits.length).toBe(0);
