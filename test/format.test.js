@@ -118,7 +118,7 @@ test("dump turn prints every line, not just the matched window", () => {
     "  │ a",
     "  │ b",
     "  │ c",
-    "  │ d",
+    "  │ >> d",
     "  │ e",
     "  │ f",
     "  │ g",
@@ -135,12 +135,21 @@ test("dump turn highlights only the matched line, by index", () => {
   expect(lines[2]).toContain("\x1b[1;31m");
 });
 
-test("a patternless dump highlights nothing", () => {
+test("a patternless dump highlights nothing and marks nothing", () => {
   const h = hit();
   h.turn.textLines = ["a", "b"];
   h.matchedLineIndices = [0, 1];
-  const out = formatDumpTurn(h, { ...opts, pattern: "" }, true);
+  const out = formatDumpTurn(h, { ...opts, pattern: undefined }, true);
   expect(out).not.toContain("\x1b[1;31m");
+  expect(out).not.toContain(">>");
+});
+
+test("a dump marks matched lines with >> so color-never keeps the signal", () => {
+  const h = hit();
+  h.turn.textLines = ["a", "match", "b"];
+  h.matchedLineIndices = [1];
+  const out = formatDumpTurn(h, { ...opts, pattern: "match" }, false);
+  expect(out.split("\n").slice(1)).toEqual(["  │ a", "  │ >> match", "  │ b"]);
 });
 
 test("prose does not borrow an earlier call's tool header", () => {

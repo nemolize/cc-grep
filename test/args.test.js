@@ -198,8 +198,18 @@ test("--session makes the pattern optional", () => {
   expect(r.kind).toBe("options");
   if (r.kind === "options") {
     expect(r.options.session).toBe("abc123");
-    expect(r.options.pattern).toBe("");
+    expect(r.options.pattern).toBe(undefined);
   }
+});
+
+test("--include-subagents defaults off", () => {
+  const r = parse(["--session", "abc123"]);
+  if (r.kind === "options") expect(r.options.includeSubagents).toBe(false);
+});
+
+test("--include-subagents is parsed", () => {
+  const r = parse(["--session", "abc123", "--include-subagents"]);
+  if (r.kind === "options") expect(r.options.includeSubagents).toBe(true);
 });
 
 test("--session accepts a pattern alongside it", () => {

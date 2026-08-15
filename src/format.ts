@@ -38,6 +38,10 @@ function shortSession(id: string | undefined): string {
   return id.slice(0, 8);
 }
 
+function cyan(text: string, color: boolean): string {
+  return color ? CYAN + text + RESET : text;
+}
+
 function highlight(
   line: string,
   ranges: [number, number][],
@@ -83,11 +87,11 @@ export function formatHit(
   color: boolean,
 ): string {
   const { turn } = hit;
-  const header =
-    (color ? CYAN : "") +
+  const header = cyan(
     `${shortenPath(turn.cwd, home)}  ${formatTimestamp(turn.timestampMs)}  ` +
-    `${shortSession(turn.sessionId)}  ${turn.role}` +
-    (color ? RESET : "");
+      `${shortSession(turn.sessionId)}  ${turn.role}`,
+    color,
+  );
 
   const matcher = buildMatcher(opts);
   const matched = new Set(hit.matchedLineIndices);
@@ -125,12 +129,10 @@ export function formatDumpBanner(
   home: string,
   color: boolean,
 ): string {
-  const id = turn.sessionId ?? "?";
-  return (
-    (color ? CYAN : "") +
-    `session ${id}  ${shortenPath(turn.cwd, home)}` +
-    (turn.gitBranch === undefined ? "" : `  (${turn.gitBranch})`) +
-    (color ? RESET : "")
+  return cyan(
+    `session ${turn.sessionId ?? "?"}  ${shortenPath(turn.cwd, home)}` +
+      (turn.gitBranch === undefined ? "" : `  (${turn.gitBranch})`),
+    color,
   );
 }
 
@@ -146,20 +148,21 @@ export function formatDumpTurn(
   color: boolean,
 ): string {
   const { turn } = hit;
-  const header =
-    (color ? CYAN : "") +
-    `${turn.role}  ${formatTimestamp(turn.timestampMs)}` +
-    (color ? RESET : "");
+  const header = cyan(
+    `${turn.role}  ${formatTimestamp(turn.timestampMs)}`,
+    color,
+  );
 
   const matcher = buildMatcher(opts);
   const matched = new Set(hit.matchedLineIndices);
-  // An empty pattern marks every line matched; highlighting all of them is
-  // noise, so only a real pattern lights up.
-  const highlighting = opts.pattern !== "";
+  // With no pattern every line is "matched"; highlighting all of them is noise.
+  const highlighting = opts.pattern !== undefined;
 
+  // `>>` marks the match the same way a search hit does, so it survives
+  // `--color never` and a pipe.
   const body = turn.textLines.map((raw, i) =>
     highlighting && matched.has(i)
-      ? `  │ ${highlight(raw, matcher.ranges(raw), color)}`
+      ? `  │ >> ${highlight(raw, matcher.ranges(raw), color)}`
       : `  │ ${raw}`,
   );
 

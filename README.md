@@ -48,6 +48,8 @@ $ npx @nemolize/cc-grep "auth flow"
 
 - `--session <id>` — dump one session as a conversation instead of searching;
   see [Reading one session](#reading-one-session).
+- `--include-subagents` — keep subagent turns in a `--session` dump, off by
+  default. Search always sees them.
 - `--role <user|assistant|any>` — restrict by turn role (default: `any`).
 - `--since <dur|date>` / `--until <dur|date>` — time window. Accepts a relative
   duration (`7d`, `2h`, `30m`, `1w`) or an absolute date (`2026-06-01`).
@@ -85,6 +87,10 @@ user  2026-07-10 21:34
 
 - The id can be a prefix — the 8-char form the search output prints is enough.
   A prefix matching several sessions dumps each and warns on stderr, so widen it.
+- Subagent turns are left out. A subagent's transcript carries its parent's
+  session id, so including them would splice every agent the session spawned
+  into the conversation — often more turns than the conversation itself.
+  `--include-subagents` puts them back; a plain search sees them either way.
 - The pattern is optional. Give one anyway to keep only the turns that match it,
   with the match highlighted; the whole turn is shown either way, since `-C N`
   windows are for scanning search hits, not for reading a conversation.

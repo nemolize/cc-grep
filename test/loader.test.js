@@ -72,6 +72,24 @@ test("loadTurns tolerates missing optional fields", async () => {
     expect(turns[0].sessionId).toBe(undefined);
     expect(turns[0].timestampMs).toBe(undefined);
     expect(turns[0].isMeta).toBe(false);
+    expect(turns[0].isSidechain).toBe(false);
+  });
+});
+
+test("loadTurns carries isSidechain through", async () => {
+  await withTempDir(async (dir) => {
+    const file = join(dir, "s.jsonl");
+    await writeFile(
+      file,
+      JSON.stringify({
+        type: "user",
+        isSidechain: true,
+        message: { content: "from a subagent" },
+      }) + "\n",
+    );
+    const turns = [];
+    for await (const t of loadTurns(file)) turns.push(t);
+    expect(turns[0].isSidechain).toBe(true);
   });
 });
 

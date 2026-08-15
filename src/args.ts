@@ -23,6 +23,8 @@ Scope:
 Filters:
   --session <id>                Dump one session as a conversation (id or prefix);
                                 pattern becomes optional and, if given, highlights
+  --include-subagents           Keep subagent turns in a --session dump
+                                (excluded by default; search always sees them)
   --role <user|assistant|any>   Restrict by turn role (default: any)
   --since <dur|date>            Only turns at/after (e.g. 7d, 2h, 2026-06-01)
   --until <dur|date>            Only turns at/before
@@ -58,6 +60,7 @@ const ARG_OPTIONS = {
   cwd: { type: "string" },
   branch: { type: "string" },
   "include-meta": { type: "boolean" },
+  "include-subagents": { type: "boolean" },
   context: { type: "string", short: "C" },
   json: { type: "boolean" },
   color: { type: "string" },
@@ -138,8 +141,6 @@ export function parseArgs(
   }
 
   const pattern = positionals[0];
-  // Without a pattern, `--session` still selects a whole conversation; an empty
-  // pattern makes every line of it a match.
   if (pattern === undefined && session === undefined) {
     return err("missing search pattern");
   }
@@ -210,7 +211,7 @@ export function parseArgs(
   return {
     kind: "options",
     options: {
-      pattern: pattern ?? "",
+      pattern,
       session,
       regex: values.regex ?? false,
       fixed: values.fixed ?? false,
@@ -222,6 +223,7 @@ export function parseArgs(
       cwd: values.cwd,
       branch: values.branch,
       includeMeta: values["include-meta"] ?? false,
+      includeSubagents: values["include-subagents"] ?? false,
       context,
       resume: values.resume ?? false,
       printResume: values["print-resume"] ?? false,

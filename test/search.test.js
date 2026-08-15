@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -101,7 +101,9 @@ test("--cwd substring restricts by working directory", async () => {
 
 test("--session with no pattern yields every turn of that session", async () => {
   await corpus(async (root) => {
-    const hits = await collect(opts(root, { pattern: "", session: "nomatch" }));
+    const hits = await collect(
+      opts(root, { pattern: undefined, session: "nomatch" }),
+    );
     expect(hits.length).toBe(1);
     expect(hits[0].turn.sessionId).toBe("nomatch");
     // Every line is a match, so the dump renders the whole turn.
@@ -119,9 +121,71 @@ test("--session with a pattern keeps search semantics inside the session", async
 test("--session composes with --role", async () => {
   await corpus(async (root) => {
     const hits = await collect(
-      opts(root, { pattern: "", session: "o", role: "user" }),
+      opts(root, { pattern: undefined, session: "o", role: "user" }),
     );
     expect(hits.map((h) => h.turn.sessionId)).toEqual(["old"]);
+  });
+});
+
+// A subagent transcript lives beside the session's own file and carries the
+// PARENT's sessionId, so a dump would splice it into the conversation.
+async function corpusWithSubagent(fn) {
+  const dir = await mkdtemp(join(tmpdir(), "cc-grep-sidechain-"));
+  const line = (o) => JSON.stringify(o);
+  await writeFile(
+    join(dir, "s.jsonl"),
+    line({
+      type: "user",
+      sessionId: "parent",
+      timestamp: "2026-07-13T00:00:00Z",
+      message: { content: "a needle in the main timeline" },
+    }),
+  );
+  await mkdir(join(dir, "parent", "subagents"), { recursive: true });
+  await writeFile(
+    join(dir, "parent", "subagents", "agent-x.jsonl"),
+    line({
+      type: "user",
+      sessionId: "parent",
+      isSidechain: true,
+      timestamp: "2026-07-13T00:01:00Z",
+      message: { content: "a needle inside a spawned agent" },
+    }),
+  );
+  try {
+    await fn(dir);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
+test("a dump excludes subagent turns that share the parent's session id", async () => {
+  await corpusWithSubagent(async (root) => {
+    const hits = await collect(
+      opts(root, { pattern: undefined, session: "parent" }),
+    );
+    expect(hits.length).toBe(1);
+    expect(hits[0].turn.isSidechain).toBe(false);
+  });
+});
+
+test("--include-subagents keeps them in the dump", async () => {
+  await corpusWithSubagent(async (root) => {
+    const hits = await collect(
+      opts(root, {
+        pattern: undefined,
+        session: "parent",
+        includeSubagents: true,
+      }),
+    );
+    expect(hits.length).toBe(2);
+  });
+});
+
+test("plain search still sees subagent turns", async () => {
+  await corpusWithSubagent(async (root) => {
+    const hits = await collect(opts(root, {}));
+    expect(hits.length).toBe(2);
   });
 });
 

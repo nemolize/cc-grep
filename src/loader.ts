@@ -102,6 +102,7 @@ function parseLine(
     gitBranch:
       typeof obj["gitBranch"] === "string" ? obj["gitBranch"] : undefined,
     isMeta: obj["isMeta"] === true,
+    isSidechain: obj["isSidechain"] === true,
     textLines,
   };
 }

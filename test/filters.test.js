@@ -107,3 +107,16 @@ test("unknown session id excluded when --session is active", () => {
     passesFilters(turn({ sessionId: undefined }), opts({ session: "abc" })),
   ).toBe(false);
 });
+
+test("a dump excludes sidechain turns, --include-subagents keeps them", () => {
+  const sub = turn({ sessionId: "abc", isSidechain: true });
+  expect(passesFilters(sub, opts({ session: "abc" }))).toBe(false);
+  expect(
+    passesFilters(sub, opts({ session: "abc", includeSubagents: true })),
+  ).toBe(true);
+});
+
+test("plain search keeps sidechain turns (only a dump excludes them)", () => {
+  const sub = turn({ sessionId: "abc", isSidechain: true });
+  expect(passesFilters(sub, opts({}))).toBe(true);
+});
