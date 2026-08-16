@@ -39,9 +39,8 @@ export function passesFilters(turn: Turn, opts: Options): boolean {
 }
 
 /**
- * Subagent transcripts carry the parent's sessionId, so an unfiltered dump
- * splices every agent a session spawned into the conversation — hence the
- * differing defaults: a search sees them, a dump does not.
+ * The default differs per surface because an unfiltered dump would splice every
+ * agent a session spawned into the conversation.
  */
 function passesSubagentScope(turn: Turn, opts: Options): boolean {
   const scope =

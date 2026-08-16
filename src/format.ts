@@ -39,15 +39,18 @@ function shortSession(id: string | undefined): string {
 }
 
 /**
- * Suffix marking a subagent hit. A subagent turn carries its parent's session
- * id and a bare `user` role, so an unmarked header reads as something the human
- * typed in that session rather than a prompt injected into a spawned agent.
+ * Unmarked, a subagent hit's header reads as something the human typed: the
+ * turn carries its parent's session id and a bare `user` role.
  */
 export const SUBAGENT_MARK = "▸sub";
 
+/**
+ * Space-separated, never glued to the id: the printed id is what a user copies
+ * back into `--session`, and a marker inside that token matches no session.
+ */
 function sessionField(turn: Turn): string {
   const id = shortSession(turn.sessionId);
-  return turn.isSidechain ? id + SUBAGENT_MARK : id;
+  return turn.isSidechain ? `${id} ${SUBAGENT_MARK}` : id;
 }
 
 function cyan(text: string, color: boolean): string {
@@ -198,8 +201,8 @@ export function formatHitJson(hit: Hit, home: string): string {
     gitBranch: turn.gitBranch,
     isMeta: turn.isMeta,
     isSubagent: turn.isSidechain,
-    // A subagent transcript stores the parent's id in `sessionId`; naming it
-    // again spares a consumer the "is this the parent or the agent?" question.
+    // Naming the parent again spares a consumer the "is this the parent or the
+    // agent?" question about `sessionId`.
     ...(turn.isSidechain
       ? { agentId: turn.agentId, parentSessionId: turn.sessionId }
       : {}),

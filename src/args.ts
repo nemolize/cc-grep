@@ -176,7 +176,6 @@ export function parseArgs(
   if (subagentsValue !== undefined && values["include-subagents"] === true) {
     return err("--subagents and --include-subagents cannot be combined");
   }
-  // The deprecated flag only ever meant "put them back into a dump".
   const subagents: SubagentScope | undefined =
     subagentsValue ??
     (values["include-subagents"] === true ? "include" : undefined);

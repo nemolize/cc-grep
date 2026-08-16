@@ -113,9 +113,14 @@ conversation itself.
 Hits from a subagent are marked on the header, right after the session id:
 
 ```
-~/proj  2026-07-25 01:28  09a180aa▸sub  user
+~/proj  2026-07-25 01:28  09a180aa ▸sub  user
   │ >> …a skill body injected into a spawned agent…
 ```
+
+The mark is a separate token, so the session id stays copyable into `--session`.
+In a `--session` dump the mark carries the agent's own id alongside it
+(`user  2026-07-25 01:28  ▸sub a2b5036c2408d89dc`), which separates one spawned
+agent's turns from another's.
 
 `--subagents` scopes them, and the default differs by surface — a search
 includes them, a `--session` dump excludes them:

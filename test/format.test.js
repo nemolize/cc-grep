@@ -155,10 +155,16 @@ test("a dump marks matched lines with >> so color-never keeps the signal", () =>
   expect(out.split("\n").slice(1)).toEqual(["  │ a", "  │ >> match", "  │ b"]);
 });
 
+// The mark is asserted as a literal, not via SUBAGENT_MARK: routing both sides
+// through the constant lets a wrong value pass every assertion.
+test("the exported mark is the literal the output contract promises", () => {
+  expect(SUBAGENT_MARK).toBe("▸sub");
+});
+
 test("a subagent hit is marked on the header, a main-thread one is not", () => {
   const main = formatHit(hit(), opts, "/home/u", false).split("\n")[0];
   expect(main).toContain("abcdef12  user");
-  expect(main).not.toContain(SUBAGENT_MARK);
+  expect(main).not.toContain("▸sub");
 
   const sub = formatHit(
     hit({ isSidechain: true }),
@@ -166,20 +172,32 @@ test("a subagent hit is marked on the header, a main-thread one is not", () => {
     "/home/u",
     false,
   ).split("\n")[0];
-  expect(sub).toContain(`abcdef12${SUBAGENT_MARK}  user`);
+  expect(sub).toContain("abcdef12 ▸sub  user");
+});
+
+test("the mark never joins the session id, which is copied back into --session", () => {
+  const header = formatHit(
+    hit({ isSidechain: true }),
+    opts,
+    "/home/u",
+    false,
+  ).split("\n")[0];
+  // Whitespace-splitting the header — `awk '{print $N}'` — must still yield a
+  // usable id rather than one with the marker glued on.
+  expect(header.split(/\s+/)).toContain("abcdef12");
 });
 
 test("a subagent dump turn carries the mark and its agent id", () => {
   const h = hit({ isSidechain: true, agentId: "a0d4d2d0b4abed822" });
   const header = formatDumpTurn(h, opts, false).split("\n")[0];
-  expect(header).toContain(`${SUBAGENT_MARK} a0d4d2d0b4abed822`);
+  expect(header).toContain("▸sub a0d4d2d0b4abed822");
 });
 
 test("a subagent dump turn without an agent id still marks", () => {
   const header = formatDumpTurn(hit({ isSidechain: true }), opts, false).split(
     "\n",
   )[0];
-  expect(header).toMatch(new RegExp(`${SUBAGENT_MARK}$`));
+  expect(header).toMatch(/▸sub$/);
 });
 
 test("formatHitJson names the subagent relation instead of leaving it to the path", () => {
