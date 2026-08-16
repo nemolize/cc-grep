@@ -35,31 +35,10 @@ jobs:
       - name: Check out code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # nemolize/actions/setup takes no inputs, so it cannot carry the mise pin
-      # or the per-Node cache key this matrix needs; the steps stay inline here.
-      - name: Set up mise (Node ${{ matrix.node-version }} + pnpm)
-        uses: jdx/mise-action@3c2e0cf82a5b2e5249f0d3635a4d83d0ae861518 # v4.2.5
-        with:
-          # Pin the mise CLI itself; without this the action installs whichever
-          # release is latest at cold-cache time. Renovate keeps this current.
-          version: 2026.8.5
-          # Include the Node major in the cache key so matrix jobs don't share
-          # a single cached install across different Node versions.
-          cache_key_prefix: mise-v1-node${{ matrix.node-version }}
-
-      - name: Resolve the pnpm store path
-        id: store
-        run: echo "path=$(pnpm store path)" >> "$GITHUB_OUTPUT"
-
-      - name: Cache the pnpm store
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ${{ steps.store.outputs.path }}
-          key: pnpm-store-${{ runner.os }}-node${{ matrix.node-version }}-${{ hashFiles('pnpm-lock.yaml', 'mise.toml') }}
-          restore-keys: pnpm-store-${{ runner.os }}-node${{ matrix.node-version }}-
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      # Reads MISE_NODE_VERSION above into both cache keys, so the matrix legs
+      # don't share the toolchain or the pnpm store.
+      - name: Set up the toolchain and install dependencies
+        uses: nemolize/actions/setup@0a6e86438446cdc086f5dc490688523d8fb8282c # v1.4.0
 
       # Runs eslint, prettier and the type-check in parallel; --continue-on-error
       # reports every failing one instead of stopping at the first.
