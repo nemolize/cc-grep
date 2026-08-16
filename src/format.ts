@@ -38,6 +38,18 @@ function shortSession(id: string | undefined): string {
   return id.slice(0, 8);
 }
 
+/**
+ * Suffix marking a subagent hit. A subagent turn carries its parent's session
+ * id and a bare `user` role, so an unmarked header reads as something the human
+ * typed in that session rather than a prompt injected into a spawned agent.
+ */
+export const SUBAGENT_MARK = "▸sub";
+
+function sessionField(turn: Turn): string {
+  const id = shortSession(turn.sessionId);
+  return turn.isSidechain ? id + SUBAGENT_MARK : id;
+}
+
 function cyan(text: string, color: boolean): string {
   return color ? CYAN + text + RESET : text;
 }
@@ -89,7 +101,7 @@ export function formatHit(
   const { turn } = hit;
   const header = cyan(
     `${shortenPath(turn.cwd, home)}  ${formatTimestamp(turn.timestampMs)}  ` +
-      `${shortSession(turn.sessionId)}  ${turn.role}`,
+      `${sessionField(turn)}  ${turn.role}`,
     color,
   );
 
@@ -149,7 +161,10 @@ export function formatDumpTurn(
 ): string {
   const { turn } = hit;
   const header = cyan(
-    `${turn.role}  ${formatTimestamp(turn.timestampMs)}`,
+    `${turn.role}  ${formatTimestamp(turn.timestampMs)}` +
+      (turn.isSidechain
+        ? `  ${SUBAGENT_MARK}${turn.agentId === undefined ? "" : " " + turn.agentId}`
+        : ""),
     color,
   );
 
@@ -182,6 +197,12 @@ export function formatHitJson(hit: Hit, home: string): string {
     role: turn.role,
     gitBranch: turn.gitBranch,
     isMeta: turn.isMeta,
+    isSubagent: turn.isSidechain,
+    // A subagent transcript stores the parent's id in `sessionId`; naming it
+    // again spares a consumer the "is this the parent or the agent?" question.
+    ...(turn.isSidechain
+      ? { agentId: turn.agentId, parentSessionId: turn.sessionId }
+      : {}),
     matchedLines: hit.matchedLineIndices.map((i) => turn.textLines[i]),
   });
 }

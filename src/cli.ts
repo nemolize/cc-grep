@@ -147,12 +147,13 @@ async function main(): Promise<number> {
       opts.sinceMs !== undefined ||
       opts.untilMs !== undefined ||
       opts.cwd !== undefined ||
-      opts.branch !== undefined;
+      opts.branch !== undefined ||
+      opts.subagents !== undefined;
     process.stderr.write(
       `cc-grep: no turns for session "${opts.session ?? ""}" — ` +
         (narrowed
           ? "check the id, or loosen the pattern/filters\n"
-          : "check the id, or try --include-subagents\n"),
+          : "check the id, or try --subagents=include\n"),
     );
   }
 

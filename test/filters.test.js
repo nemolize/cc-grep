@@ -8,6 +8,7 @@ function turn(over) {
     lineIndex: 0,
     role: "user",
     isMeta: false,
+    isSidechain: false,
     textLines: ["hi"],
     ...over,
   };
@@ -108,12 +109,37 @@ test("unknown session id excluded when --session is active", () => {
   ).toBe(false);
 });
 
-test("a dump excludes sidechain turns, --include-subagents keeps them", () => {
+test("a dump excludes sidechain turns, --subagents=include keeps them", () => {
   const sub = turn({ sessionId: "abc", isSidechain: true });
   expect(passesFilters(sub, opts({ session: "abc" }))).toBe(false);
   expect(
-    passesFilters(sub, opts({ session: "abc", includeSubagents: true })),
+    passesFilters(sub, opts({ session: "abc", subagents: "include" })),
   ).toBe(true);
+});
+
+test("--subagents=exclude drops sidechain turns from a search", () => {
+  const sub = turn({ isSidechain: true });
+  const main = turn({ isSidechain: false });
+  expect(passesFilters(sub, opts({ subagents: "exclude" }))).toBe(false);
+  expect(passesFilters(main, opts({ subagents: "exclude" }))).toBe(true);
+});
+
+test("--subagents=only keeps just sidechain turns", () => {
+  const sub = turn({ isSidechain: true });
+  const main = turn({ isSidechain: false });
+  expect(passesFilters(sub, opts({ subagents: "only" }))).toBe(true);
+  expect(passesFilters(main, opts({ subagents: "only" }))).toBe(false);
+});
+
+test("--subagents=only overrides the dump's exclude default", () => {
+  const sub = turn({ sessionId: "abc", isSidechain: true });
+  const main = turn({ sessionId: "abc", isSidechain: false });
+  expect(passesFilters(sub, opts({ session: "abc", subagents: "only" }))).toBe(
+    true,
+  );
+  expect(passesFilters(main, opts({ session: "abc", subagents: "only" }))).toBe(
+    false,
+  );
 });
 
 test("plain search keeps sidechain turns (only a dump excludes them)", () => {

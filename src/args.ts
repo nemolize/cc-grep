@@ -2,7 +2,7 @@ import { parseArgs as parseNodeArgs } from "node:util";
 
 import { parseSinceUntil } from "./duration.js";
 import { defaultRoot } from "./loader.js";
-import type { ColorMode, Options, RoleFilter } from "./types.js";
+import type { ColorMode, Options, RoleFilter, SubagentScope } from "./types.js";
 
 export const HELP = `cc-grep — grep across Claude Code session transcripts
 
@@ -23,8 +23,10 @@ Scope:
 Filters:
   --session <id>                Dump one session as a conversation (id or prefix);
                                 pattern becomes optional and, if given, highlights
-  --include-subagents           Keep subagent turns in a --session dump
-                                (excluded by default; search always sees them)
+  --subagents <include|exclude|only>
+                                Scope subagent turns (default: include when
+                                searching, exclude in a --session dump)
+  --include-subagents           Deprecated alias for --subagents=include
   --role <user|assistant|any>   Restrict by turn role (default: any)
   --since <dur|date>            Only turns at/after (e.g. 7d, 2h, 2026-06-01)
   --until <dur|date>            Only turns at/before
@@ -61,6 +63,7 @@ const ARG_OPTIONS = {
   branch: { type: "string" },
   "include-meta": { type: "boolean" },
   "include-subagents": { type: "boolean" },
+  subagents: { type: "string" },
   context: { type: "string", short: "C" },
   json: { type: "boolean" },
   color: { type: "string" },
@@ -159,6 +162,25 @@ export function parseArgs(
   }
   const role: RoleFilter = roleValue ?? "any";
 
+  const subagentsValue = values.subagents;
+  if (
+    subagentsValue !== undefined &&
+    subagentsValue !== "include" &&
+    subagentsValue !== "exclude" &&
+    subagentsValue !== "only"
+  ) {
+    return err(
+      `--subagents must be one of include|exclude|only (got "${subagentsValue}")`,
+    );
+  }
+  if (subagentsValue !== undefined && values["include-subagents"] === true) {
+    return err("--subagents and --include-subagents cannot be combined");
+  }
+  // The deprecated flag only ever meant "put them back into a dump".
+  const subagents: SubagentScope | undefined =
+    subagentsValue ??
+    (values["include-subagents"] === true ? "include" : undefined);
+
   let sinceMs: number | undefined;
   let untilMs: number | undefined;
   let context = 2;
@@ -223,7 +245,7 @@ export function parseArgs(
       cwd: values.cwd,
       branch: values.branch,
       includeMeta: values["include-meta"] ?? false,
-      includeSubagents: values["include-subagents"] ?? false,
+      subagents,
       context,
       resume: values.resume ?? false,
       printResume: values["print-resume"] ?? false,

@@ -9,6 +9,7 @@ import {
   resumeCommand,
   shortenPath,
   shouldColor,
+  SUBAGENT_MARK,
 } from "../src/format.js";
 
 test("shortenPath collapses home to ~", () => {
@@ -33,7 +34,7 @@ test("formatTimestamp handles missing value", () => {
   expect(formatTimestamp(undefined)).toBe("?");
 });
 
-function hit() {
+function hit(over) {
   return {
     turn: {
       file: "/x.jsonl",
@@ -45,7 +46,9 @@ function hit() {
       cwd: "/home/u/proj",
       gitBranch: "main",
       isMeta: false,
+      isSidechain: false,
       textLines: ["line0", "match here", "line2"],
+      ...over,
     },
     matchedLineIndices: [1],
   };
@@ -150,6 +153,52 @@ test("a dump marks matched lines with >> so color-never keeps the signal", () =>
   h.matchedLineIndices = [1];
   const out = formatDumpTurn(h, { ...opts, pattern: "match" }, false);
   expect(out.split("\n").slice(1)).toEqual(["  │ a", "  │ >> match", "  │ b"]);
+});
+
+test("a subagent hit is marked on the header, a main-thread one is not", () => {
+  const main = formatHit(hit(), opts, "/home/u", false).split("\n")[0];
+  expect(main).toContain("abcdef12  user");
+  expect(main).not.toContain(SUBAGENT_MARK);
+
+  const sub = formatHit(
+    hit({ isSidechain: true }),
+    opts,
+    "/home/u",
+    false,
+  ).split("\n")[0];
+  expect(sub).toContain(`abcdef12${SUBAGENT_MARK}  user`);
+});
+
+test("a subagent dump turn carries the mark and its agent id", () => {
+  const h = hit({ isSidechain: true, agentId: "a0d4d2d0b4abed822" });
+  const header = formatDumpTurn(h, opts, false).split("\n")[0];
+  expect(header).toContain(`${SUBAGENT_MARK} a0d4d2d0b4abed822`);
+});
+
+test("a subagent dump turn without an agent id still marks", () => {
+  const header = formatDumpTurn(hit({ isSidechain: true }), opts, false).split(
+    "\n",
+  )[0];
+  expect(header).toMatch(new RegExp(`${SUBAGENT_MARK}$`));
+});
+
+test("formatHitJson names the subagent relation instead of leaving it to the path", () => {
+  const obj = JSON.parse(
+    formatHitJson(
+      hit({ isSidechain: true, agentId: "a0d4d2d0b4abed822" }),
+      "/home/u",
+    ),
+  );
+  expect(obj.isSubagent).toBe(true);
+  expect(obj.agentId).toBe("a0d4d2d0b4abed822");
+  expect(obj.parentSessionId).toBe("abcdef12-3456");
+});
+
+test("formatHitJson omits the subagent fields on a main-thread hit", () => {
+  const obj = JSON.parse(formatHitJson(hit(), "/home/u"));
+  expect(obj.isSubagent).toBe(false);
+  expect("agentId" in obj).toBe(false);
+  expect("parentSessionId" in obj).toBe(false);
 });
 
 test("prose does not borrow an earlier call's tool header", () => {

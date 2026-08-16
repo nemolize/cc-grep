@@ -24,6 +24,8 @@ export interface Turn {
    * separates the conversation from the agents it spawned.
    */
   isSidechain: boolean;
+  /** Identifier of the spawned agent, present only on subagent turns. */
+  agentId?: string | undefined;
   /**
    * Searchable text lines extracted from `message.content`. Each element is one
    * logical line; matching and context (`-C N`) operate over this array.
@@ -32,6 +34,12 @@ export interface Turn {
 }
 
 export type RoleFilter = "user" | "assistant" | "any";
+
+/**
+ * Scope of subagent turns. Left undefined when unspecified, so each surface can
+ * keep its own default: a search sees them, a `--session` dump does not.
+ */
+export type SubagentScope = "include" | "exclude" | "only";
 
 export type ColorMode = "always" | "never" | "auto";
 
@@ -49,8 +57,8 @@ export interface Options {
   cwd?: string | undefined;
   branch?: string | undefined;
   includeMeta: boolean;
-  /** Keep subagent turns in a `--session` dump (they are always searchable). */
-  includeSubagents: boolean;
+  /** Absent when neither `--subagents` nor `--include-subagents` was given. */
+  subagents?: SubagentScope | undefined;
   context: number;
   resume: boolean;
   printResume: boolean;

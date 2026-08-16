@@ -48,8 +48,10 @@ $ npx @nemolize/cc-grep "auth flow"
 
 - `--session <id>` — dump one session as a conversation instead of searching;
   see [Reading one session](#reading-one-session).
-- `--include-subagents` — keep subagent turns in a `--session` dump, off by
-  default. Search always sees them.
+- `--subagents <include|exclude|only>` — scope subagent turns. Defaults differ
+  per surface: a search includes them, a `--session` dump excludes them; see
+  [Subagent turns](#subagent-turns). `--include-subagents` is a deprecated alias
+  for `--subagents=include`.
 - `--role <user|assistant|any>` — restrict by turn role (default: `any`).
 - `--since <dur|date>` / `--until <dur|date>` — time window. Accepts a relative
   duration (`7d`, `2h`, `30m`, `1w`) or an absolute date (`2026-06-01`).
@@ -87,10 +89,8 @@ user  2026-07-10 21:34
 
 - The id can be a prefix — the 8-char form the search output prints is enough.
   A prefix matching several sessions dumps each and warns on stderr, so widen it.
-- Subagent turns are left out. A subagent's transcript carries its parent's
-  session id, so including them would splice every agent the session spawned
-  into the conversation — often more turns than the conversation itself.
-  `--include-subagents` puts them back; a plain search sees them either way.
+- Subagent turns are left out by default; `--subagents=include` puts them back.
+  See [Subagent turns](#subagent-turns).
 - The pattern is optional. Give one anyway to keep only the turns that match it,
   with the match highlighted; the whole turn is shown either way, since `-C N`
   windows are for scanning search hits, not for reading a conversation.
@@ -102,11 +102,40 @@ user  2026-07-10 21:34
 `claude --resume` also reopens a session, but interactively and at the cost of a
 context window. Reading a past conversation as text is a different job.
 
+## Subagent turns
+
+A subagent's transcript lives beside its parent's and carries the _parent's_
+session id, so its turns look like ordinary ones. They are not: a subagent's
+`user` turn is the prompt an orchestrator injected into a spawned agent, not
+something the human typed. In a fan-out-heavy session they can outnumber the
+conversation itself.
+
+Hits from a subagent are marked on the header, right after the session id:
+
+```
+~/proj  2026-07-25 01:28  09a180aa▸sub  user
+  │ >> …a skill body injected into a spawned agent…
+```
+
+`--subagents` scopes them, and the default differs by surface — a search
+includes them, a `--session` dump excludes them:
+
+- `include` — search's default. Everything the session produced.
+- `exclude` — what you want when reconstructing what the human actually asked,
+  since `--role user` alone still mixes in every orchestrator prompt.
+- `only` — what you want when auditing what a fan-out did.
+
+`--json` names the relation rather than leaving it to be inferred from the file
+path: `isSubagent`, plus `agentId` and `parentSessionId` on a subagent hit.
+
 ## Recipes
 
 ```sh
 # What did I ask about X in the last month?
-cc-grep "X" --role user --since 30d
+cc-grep "X" --role user --since 30d --subagents exclude
+
+# What did the agents a session spawned actually do with X?
+cc-grep "X" --subagents only
 
 # Jump back into the most relevant past session
 cc-grep "X" --resume

@@ -202,14 +202,37 @@ test("--session makes the pattern optional", () => {
   }
 });
 
-test("--include-subagents defaults off", () => {
+test("--subagents is unset by default, leaving each surface its own default", () => {
   const r = parse(["--session", "abc123"]);
-  if (r.kind === "options") expect(r.options.includeSubagents).toBe(false);
+  if (r.kind === "options") expect(r.options.subagents).toBe(undefined);
 });
 
-test("--include-subagents is parsed", () => {
+test("--subagents accepts each scope", () => {
+  for (const scope of ["include", "exclude", "only"]) {
+    const r = parse(["needle", "--subagents", scope]);
+    expect(r.kind).toBe("options");
+    if (r.kind === "options") expect(r.options.subagents).toBe(scope);
+  }
+});
+
+test("--subagents rejects an unknown scope", () => {
+  const r = parse(["needle", "--subagents", "both"]);
+  expect(r.kind).toBe("error");
+  if (r.kind === "error") expect(r.message).toMatch(/include\|exclude\|only/);
+});
+
+test("--include-subagents still maps to the include scope", () => {
   const r = parse(["--session", "abc123", "--include-subagents"]);
-  if (r.kind === "options") expect(r.options.includeSubagents).toBe(true);
+  if (r.kind === "options") expect(r.options.subagents).toBe("include");
+});
+
+test("--subagents and --include-subagents cannot be combined", () => {
+  const r = parse(["needle", "--subagents", "only", "--include-subagents"]);
+  expect(r.kind).toBe("error");
+});
+
+test("help documents --subagents", () => {
+  expect(HELP).toMatch(/--subagents <include\|exclude\|only>/);
 });
 
 test("--session accepts a pattern alongside it", () => {

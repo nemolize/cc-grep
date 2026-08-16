@@ -12,11 +12,9 @@ export function passesFilters(turn: Turn, opts: Options): boolean {
   // form a user copies back into `--session`.
   if (opts.session !== undefined) {
     if (turn.sessionId?.startsWith(opts.session) !== true) return false;
-    // Subagent transcripts carry the parent's sessionId, so without this a dump
-    // splices every agent it spawned into the conversation. Search still sees
-    // them; only reading one session as a conversation excludes them.
-    if (turn.isSidechain && !opts.includeSubagents) return false;
   }
+
+  if (!passesSubagentScope(turn, opts)) return false;
 
   if (opts.role !== "any" && turn.role !== opts.role) return false;
 
@@ -38,4 +36,16 @@ export function passesFilters(turn: Turn, opts: Options): boolean {
   }
 
   return true;
+}
+
+/**
+ * Subagent transcripts carry the parent's sessionId, so an unfiltered dump
+ * splices every agent a session spawned into the conversation — hence the
+ * differing defaults: a search sees them, a dump does not.
+ */
+function passesSubagentScope(turn: Turn, opts: Options): boolean {
+  const scope =
+    opts.subagents ?? (opts.session === undefined ? "include" : "exclude");
+  if (scope === "include") return true;
+  return scope === "only" ? turn.isSidechain : !turn.isSidechain;
 }
