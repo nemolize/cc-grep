@@ -43,10 +43,6 @@ export async function* findTranscripts(root: string): AsyncGenerator<string> {
  */
 export async function* loadTurns(file: string): AsyncGenerator<Turn> {
   const stream = createReadStream(file, { encoding: "utf8" });
-  // A read stream signals failure (missing file, permission, disappeared
-  // mid-scan) asynchronously via an `error` event, not by throwing here.
-  // Attaching a listener converts that into a rejected `for await` we swallow,
-  // so one unreadable file never crashes the whole search.
   const rl = createInterface({ input: stream, crlfDelay: Infinity });
   let lineIndex = -1;
   try {

@@ -111,7 +111,6 @@ export function formatHit(
   const matcher = buildMatcher(opts);
   const matched = new Set(hit.matchedLineIndices);
 
-  // Collect the line indices to show: each match ± context, merged.
   const show = new Set<number>();
   for (const idx of hit.matchedLineIndices) {
     for (let i = idx - opts.context; i <= idx + opts.context; i++) {
@@ -176,8 +175,7 @@ export function formatDumpTurn(
   // With no pattern every line is "matched"; highlighting all of them is noise.
   const highlighting = opts.pattern !== undefined;
 
-  // `>>` marks the match the same way a search hit does, so it survives
-  // `--color never` and a pipe.
+  // `>>` keeps the match visible under `--color never` and through a pipe.
   const body = turn.textLines.map((raw, i) =>
     highlighting && matched.has(i)
       ? `  │ >> ${highlight(raw, matcher.ranges(raw), color)}`

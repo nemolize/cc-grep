@@ -16,7 +16,6 @@ export function extractTextLines(content: unknown): string[] {
   return out.flatMap((s) => s.split("\n"));
 }
 
-// Bound recursion so a pathological nested structure can't blow the stack.
 const MAX_DEPTH = 8;
 
 function collect(node: unknown, out: string[], depth: number): void {
@@ -52,7 +51,6 @@ function collect(node: unknown, out: string[], depth: number): void {
     case "image":
       return; // no text to search
     default:
-      // Unknown block shape: opportunistically pull common text-bearing fields.
       if (typeof block["text"] === "string") out.push(block["text"]);
       return;
   }
