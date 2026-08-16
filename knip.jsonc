@@ -3,7 +3,6 @@
   // src/cli.ts is inferred from the `bin` field, so it is not listed here.
   "entry": ["test/**/*.test.js"],
   "project": ["src/**/*.ts", "test/**/*.js"],
-  // Invoked as a command — by the release workflow and by hand — never imported,
-  // so knip cannot see it.
+  // Only ever invoked as a command, never imported.
   "ignoreDependencies": ["@changesets/cli"],
 }

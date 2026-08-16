@@ -1,14 +1,13 @@
 name: Release
 
-# Publishing is OIDC: npmjs.com must have this repo + filename registered as a
-# trusted publisher, and no NPM_TOKEN exists to fall back on.
+# npmjs.com must have this repo + filename registered as a trusted publisher
+# before the OIDC publish below can work.
 on:
   push:
     branches: [main]
 
 permissions: {}
 
-# `queue: max`, or the next push evicts a pending publish for a merged version.
 concurrency:
   group: release
   queue: max
@@ -67,8 +66,6 @@ jobs:
           persist-credentials: false
       - uses: nemolize/actions/setup@0a6e86438446cdc086f5dc490688523d8fb8282c # v1.4.0
 
-      # Not a repeat of the version job's: the release PR can be edited before
-      # merge, so this tree is not the one that was checked there.
       - run: pnpm run lint
       - run: pnpm run build
       - run: pnpm run test
@@ -84,7 +81,7 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: write
-      id-token: write # npm Trusted Publishing
+      id-token: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
