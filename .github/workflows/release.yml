@@ -10,6 +10,7 @@ permissions: {}
 
 concurrency:
   group: release
+  # Drop this and a pending publish is evicted. actionlint rejects the key.
   queue: max
 
 jobs:
@@ -44,7 +45,7 @@ jobs:
           persist-credentials: false
       - uses: nemolize/actions/setup@0a6e86438446cdc086f5dc490688523d8fb8282c # v1.4.0
 
-      # ci.yml does not run on a PR authored by GITHUB_TOKEN; these stand in.
+      # ci.yml does not run on the PR this opens — GITHUB_TOKEN authors it.
       - run: pnpm run lint
       - run: pnpm run build
       - run: pnpm run test
@@ -66,6 +67,7 @@ jobs:
           persist-credentials: false
       - uses: nemolize/actions/setup@0a6e86438446cdc086f5dc490688523d8fb8282c # v1.4.0
 
+      # ci.yml runs on this push too, but nothing here can await another workflow.
       - run: pnpm run lint
       - run: pnpm run build
       - run: pnpm run test

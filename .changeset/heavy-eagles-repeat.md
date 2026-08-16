@@ -2,6 +2,8 @@
 "@nemolize/cc-grep": minor
 ---
 
+pr: #42
+
 Add `--session` to dump one session as a conversation. Search narrows to a
 session id, but reading that session back had no route through the tool;
 `--session` prints it whole instead of searching across all sessions. The id

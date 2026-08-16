@@ -2,6 +2,8 @@
 "@nemolize/cc-grep": minor
 ---
 
+pr: #52
+
 Mark subagent hits and add a `--subagents <include|exclude|only>` scope filter.
 A subagent turn carries its parent's session id and a bare `user` role, so it
 was indistinguishable from something the human typed; hits now carry a `▸sub`

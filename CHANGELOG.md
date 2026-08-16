@@ -39,5 +39,5 @@
 - Initial release: a cross-project full-text search CLI over Claude Code session
   transcripts, published as `@nemolize/cc-grep` and runnable via `npx`.
 
-Entries above were reconstructed by hand from the git history, this project
-having adopted Changesets only afterwards.
+Entries for 0.3.0 and earlier were reconstructed by hand from the git history,
+this project having adopted Changesets only afterwards.

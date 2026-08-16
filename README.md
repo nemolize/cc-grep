@@ -239,19 +239,20 @@ pnpm exec changeset        # pick patch/minor/major, write the summary
 ```
 
 and commit the file it writes under `.changeset/`. Changes invisible to users
-need none; `--empty` records that as deliberate.
+need none — and do not reach for `changeset --empty` to say so: an empty
+changeset makes the workflow treat the repo as mid-release and never publish.
 
 Those changesets accumulate on `main` until the release workflow collects them
 into a **Version Packages** pull request — a version bump plus `CHANGELOG.md`
 entries. That PR is the release: review it, and merging it publishes to npm,
 pushes the `v<version>` tag and creates the GitHub Release.
 
-Merge it with `gh pr merge <number> --admin`. GitHub does not trigger workflows from
-events its own token created, so `ci.yml` never runs there and `main`'s required
-checks stay unreported; the release workflow runs the checks itself, before
-opening the PR and again before publishing.
+Merge it with `gh pr merge <number> --admin`. GitHub does not trigger workflows
+from events its own token created, so `ci.yml` never runs on that PR and `main`'s
+required checks stay unreported. The release workflow checks the tree itself
+instead — before opening the PR, and again on the merged commit before publishing.
 
-Two things to know when it goes wrong:
+When it goes wrong:
 
 - `pnpm exec changeset version` needs `GITHUB_TOKEN` locally — it resolves pull
   request links through the API.
