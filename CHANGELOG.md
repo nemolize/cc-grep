@@ -1,5 +1,26 @@
 # @nemolize/cc-grep
 
+## 0.4.0
+
+### Minor Changes
+
+- [#42](https://github.com/nemolize/cc-grep/pull/42) [`c8154d4`](https://github.com/nemolize/cc-grep/commit/c8154d4996202863be23977ab458151b634928cc) - Add `--session` to dump one session as a conversation. Search narrows to a
+  session id, but reading that session back had no route through the tool;
+  `--session` prints it whole instead of searching across all sessions. The id
+  resolves by prefix, so the 8-char form search prints is enough, and the pattern
+  becomes optional — passing one alongside `--session` keeps search semantics and
+  highlights within the turns it selects. Filters compose unchanged and `--json`
+  emits the same per-hit objects, so a dump pipes to `jq` like a search.
+
+- [#52](https://github.com/nemolize/cc-grep/pull/52) [`694848e`](https://github.com/nemolize/cc-grep/commit/694848e3b4c4bb822e69244f8bc7dd5a6a9abca0) - Mark subagent hits and add a `--subagents <include|exclude|only>` scope filter.
+  A subagent turn carries its parent's session id and a bare `user` role, so it
+  was indistinguishable from something the human typed; hits now carry a `▸sub`
+  mark as a separate token, keeping the session id copyable. The default differs
+  per surface — a search includes subagent turns, a `--session` dump excludes
+  them — and `--json` names the relation via `isSubagent`, `agentId` and
+  `parentSessionId`. `--include-subagents` remains as a deprecated alias for
+  `--subagents=include`.
+
 ## 0.3.0
 
 ### Minor Changes
