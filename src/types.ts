@@ -19,6 +19,12 @@ export interface Turn {
   gitBranch?: string | undefined;
   isMeta: boolean;
   /**
+   * True for a subagent (sidechain) turn. Subagent transcripts live beside the
+   * session's own file and carry the *parent's* `sessionId`, so this is what
+   * separates the conversation from the agents it spawned.
+   */
+  isSidechain: boolean;
+  /**
    * Searchable text lines extracted from `message.content`. Each element is one
    * logical line; matching and context (`-C N`) operate over this array.
    */
@@ -30,7 +36,10 @@ export type RoleFilter = "user" | "assistant" | "any";
 export type ColorMode = "always" | "never" | "auto";
 
 export interface Options {
-  pattern: string;
+  /** Absent when `--session` is given without one: every turn is a hit. */
+  pattern?: string | undefined;
+  /** Session id (or a unique prefix) to dump as a conversation. */
+  session?: string | undefined;
   regex: boolean;
   fixed: boolean;
   root: string;
@@ -40,6 +49,8 @@ export interface Options {
   cwd?: string | undefined;
   branch?: string | undefined;
   includeMeta: boolean;
+  /** Keep subagent turns in a `--session` dump (they are always searchable). */
+  includeSubagents: boolean;
   context: number;
   resume: boolean;
   printResume: boolean;

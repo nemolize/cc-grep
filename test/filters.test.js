@@ -93,3 +93,30 @@ test("branch substring; unknown branch excluded when filter active", () => {
     passesFilters(turn({ gitBranch: undefined }), opts({ branch: "feat" })),
   ).toBe(false);
 });
+
+test("session matches on a prefix, not a substring", () => {
+  const t = turn({ sessionId: "abcdef12-3456" });
+  expect(passesFilters(t, opts({ session: "abcdef12" }))).toBe(true);
+  expect(passesFilters(t, opts({ session: "abcdef12-3456" }))).toBe(true);
+  expect(passesFilters(t, opts({ session: "def12" }))).toBe(false);
+  expect(passesFilters(t, opts({ session: "abcdef13" }))).toBe(false);
+});
+
+test("unknown session id excluded when --session is active", () => {
+  expect(
+    passesFilters(turn({ sessionId: undefined }), opts({ session: "abc" })),
+  ).toBe(false);
+});
+
+test("a dump excludes sidechain turns, --include-subagents keeps them", () => {
+  const sub = turn({ sessionId: "abc", isSidechain: true });
+  expect(passesFilters(sub, opts({ session: "abc" }))).toBe(false);
+  expect(
+    passesFilters(sub, opts({ session: "abc", includeSubagents: true })),
+  ).toBe(true);
+});
+
+test("plain search keeps sidechain turns (only a dump excludes them)", () => {
+  const sub = turn({ sessionId: "abc", isSidechain: true });
+  expect(passesFilters(sub, opts({}))).toBe(true);
+});

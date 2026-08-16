@@ -17,15 +17,23 @@ function escapeRegex(s: string): string {
 }
 
 /**
- * Build a matcher from the parsed options. Precedence: `--fixed` forces literal
- * substring even if the pattern looks like a regex; `--regex` compiles the
- * pattern as a RegExp; the default is literal substring. `--ignore-case`
+ * Build a matcher from the parsed options. With no pattern at all, every line
+ * matches and none reports ranges. Otherwise precedence: `--fixed` forces
+ * literal substring even if the pattern looks like a regex; `--regex` compiles
+ * the pattern as a RegExp; the default is literal substring. `--ignore-case`
  * applies to all three. A malformed regex throws so the CLI can report it.
  */
 export function buildMatcher(opts: Options): Matcher {
+  const pattern = opts.pattern;
+  if (pattern === undefined) {
+    return {
+      test: () => true,
+      ranges: () => [],
+    };
+  }
+
   const flags = opts.ignoreCase ? "gi" : "g";
-  const source =
-    opts.regex && !opts.fixed ? opts.pattern : escapeRegex(opts.pattern);
+  const source = opts.regex && !opts.fixed ? pattern : escapeRegex(pattern);
   let re: RegExp;
   try {
     re = new RegExp(source, flags);

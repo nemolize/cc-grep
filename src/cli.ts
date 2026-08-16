@@ -6,6 +6,8 @@ import { fileURLToPath } from "node:url";
 
 import { HELP, parseArgs } from "./args.js";
 import {
+  formatDumpBanner,
+  formatDumpTurn,
   formatHit,
   formatHitJson,
   resumeCommand,
@@ -86,21 +88,40 @@ async function main(): Promise<number> {
   let count = 0;
   let firstHit: Hit | undefined;
   const resumeLines: string[] = [];
+  const dumping = opts.session !== undefined;
+  const dumpedSessions = new Set<string>();
 
   try {
     for await (const hit of search(opts)) {
       count++;
       firstHit ??= hit;
 
+      // Tracked for every output format: the ambiguity warning is as useful to
+      // a `--json` consumer, which would otherwise silently mix two sessions.
+      const newSession =
+        dumping && !dumpedSessions.has(hit.turn.sessionId ?? "?");
+      if (newSession) dumpedSessions.add(hit.turn.sessionId ?? "?");
+
       if (opts.json) {
         await writeStdout(formatHitJson(hit, home) + "\n");
+      } else if (dumping) {
+        if (newSession) {
+          const banner = formatDumpBanner(hit.turn, home, color);
+          await writeStdout(
+            (dumpedSessions.size > 1 ? "\n" : "") + banner + "\n\n",
+          );
+        }
+        await writeStdout(formatDumpTurn(hit, opts, color) + "\n\n");
       } else {
         await writeStdout(formatHit(hit, opts, home, color) + "\n\n");
       }
 
       if (opts.printResume) {
         const cmd = resumeCommand(hit);
-        if (cmd !== undefined) resumeLines.push(cmd);
+        // Every turn of a dump carries the same id, so print it once per session.
+        if (cmd !== undefined && !(dumping && !newSession)) {
+          resumeLines.push(cmd);
+        }
       }
     }
   } catch (err) {
@@ -109,6 +130,30 @@ async function main(): Promise<number> {
       `cc-grep: ${err instanceof Error ? err.message : String(err)}\n`,
     );
     return 2;
+  }
+
+  if (dumping && dumpedSessions.size > 1) {
+    process.stderr.write(
+      `cc-grep: "${opts.session ?? ""}" matched ${String(dumpedSessions.size)} sessions — ` +
+        `pass a longer prefix to dump just one\n`,
+    );
+  }
+  // A pattern or a filter empties a session that exists, so this reports the
+  // turns rather than diagnosing the id the user would otherwise re-check.
+  if (dumping && count === 0) {
+    const narrowed =
+      opts.pattern !== undefined ||
+      opts.role !== "any" ||
+      opts.sinceMs !== undefined ||
+      opts.untilMs !== undefined ||
+      opts.cwd !== undefined ||
+      opts.branch !== undefined;
+    process.stderr.write(
+      `cc-grep: no turns for session "${opts.session ?? ""}" — ` +
+        (narrowed
+          ? "check the id, or loosen the pattern/filters\n"
+          : "check the id, or try --include-subagents\n"),
+    );
   }
 
   if (!opts.json) {

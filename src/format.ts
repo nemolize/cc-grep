@@ -1,6 +1,6 @@
 import { buildMatcher } from "./matcher.js";
 import { TOOL_MARK } from "./textExtract.js";
-import type { ColorMode, Hit, Options } from "./types.js";
+import type { ColorMode, Hit, Options, Turn } from "./types.js";
 
 const RESET = "\x1b[0m";
 const BOLD_RED = "\x1b[1;31m";
@@ -36,6 +36,10 @@ export function formatTimestamp(ms: number | undefined): string {
 function shortSession(id: string | undefined): string {
   if (id === undefined || id === "") return "?";
   return id.slice(0, 8);
+}
+
+function cyan(text: string, color: boolean): string {
+  return color ? CYAN + text + RESET : text;
 }
 
 function highlight(
@@ -83,11 +87,11 @@ export function formatHit(
   color: boolean,
 ): string {
   const { turn } = hit;
-  const header =
-    (color ? CYAN : "") +
+  const header = cyan(
     `${shortenPath(turn.cwd, home)}  ${formatTimestamp(turn.timestampMs)}  ` +
-    `${shortSession(turn.sessionId)}  ${turn.role}` +
-    (color ? RESET : "");
+      `${shortSession(turn.sessionId)}  ${turn.role}`,
+    color,
+  );
 
   const matcher = buildMatcher(opts);
   const matched = new Set(hit.matchedLineIndices);
@@ -112,6 +116,55 @@ export function formatHit(
     const dim = color ? DIM + raw + RESET : raw;
     return `  │ ${dim}`;
   });
+
+  return [header, ...body].join("\n");
+}
+
+/**
+ * Banner printed once above a `--session` dump, carrying the per-session
+ * metadata that `formatHit` repeats on every hit.
+ */
+export function formatDumpBanner(
+  turn: Turn,
+  home: string,
+  color: boolean,
+): string {
+  return cyan(
+    `session ${turn.sessionId ?? "?"}  ${shortenPath(turn.cwd, home)}` +
+      (turn.gitBranch === undefined ? "" : `  (${turn.gitBranch})`),
+    color,
+  );
+}
+
+/**
+ * Render one turn of a `--session` dump: a `role  timestamp` header over the
+ * turn's full text. Unlike `formatHit` this never elides — reading a past
+ * conversation is the point, so context windows do not apply — but a pattern
+ * given alongside `--session` still highlights.
+ */
+export function formatDumpTurn(
+  hit: Hit,
+  opts: Options,
+  color: boolean,
+): string {
+  const { turn } = hit;
+  const header = cyan(
+    `${turn.role}  ${formatTimestamp(turn.timestampMs)}`,
+    color,
+  );
+
+  const matcher = buildMatcher(opts);
+  const matched = new Set(hit.matchedLineIndices);
+  // With no pattern every line is "matched"; highlighting all of them is noise.
+  const highlighting = opts.pattern !== undefined;
+
+  // `>>` marks the match the same way a search hit does, so it survives
+  // `--color never` and a pipe.
+  const body = turn.textLines.map((raw, i) =>
+    highlighting && matched.has(i)
+      ? `  │ >> ${highlight(raw, matcher.ranges(raw), color)}`
+      : `  │ ${raw}`,
+  );
 
   return [header, ...body].join("\n");
 }

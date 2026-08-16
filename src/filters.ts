@@ -1,13 +1,23 @@
 import type { Options, Turn } from "./types.js";
 
 /**
- * True if a turn passes every metadata filter (role / time window / cwd /
- * branch / meta). Turns missing a field the filter targets are excluded when a
- * filter for that field is active — a `--cwd` filter can't match an unknown
- * cwd, and a turn without a parseable timestamp can't be placed inside a
- * requested `--since`/`--until` window.
+ * True if a turn passes every metadata filter (session / role / time window /
+ * cwd / branch / meta). Turns missing a field the filter targets are excluded
+ * when a filter for that field is active — a `--cwd` filter can't match an
+ * unknown cwd, and a turn without a parseable timestamp can't be placed inside
+ * a requested `--since`/`--until` window.
  */
 export function passesFilters(turn: Turn, opts: Options): boolean {
+  // Prefix, not equality: search output prints an 8-char id, and that is the
+  // form a user copies back into `--session`.
+  if (opts.session !== undefined) {
+    if (turn.sessionId?.startsWith(opts.session) !== true) return false;
+    // Subagent transcripts carry the parent's sessionId, so without this a dump
+    // splices every agent it spawned into the conversation. Search still sees
+    // them; only reading one session as a conversation excludes them.
+    if (turn.isSidechain && !opts.includeSubagents) return false;
+  }
+
   if (opts.role !== "any" && turn.role !== opts.role) return false;
 
   if (!opts.includeMeta && turn.isMeta) return false;

@@ -192,3 +192,43 @@ test("--root explicit beats env", () => {
   const r = parse(["p", "--root", "/explicit"], { CC_GREP_ROOT: "/env" });
   if (r.kind === "options") expect(r.options.root).toBe("/explicit");
 });
+
+test("--session makes the pattern optional", () => {
+  const r = parse(["--session", "abc123"]);
+  expect(r.kind).toBe("options");
+  if (r.kind === "options") {
+    expect(r.options.session).toBe("abc123");
+    expect(r.options.pattern).toBe(undefined);
+  }
+});
+
+test("--include-subagents defaults off", () => {
+  const r = parse(["--session", "abc123"]);
+  if (r.kind === "options") expect(r.options.includeSubagents).toBe(false);
+});
+
+test("--include-subagents is parsed", () => {
+  const r = parse(["--session", "abc123", "--include-subagents"]);
+  if (r.kind === "options") expect(r.options.includeSubagents).toBe(true);
+});
+
+test("--session accepts a pattern alongside it", () => {
+  const r = parse(["--session", "abc123", "needle"]);
+  if (r.kind === "options") {
+    expect(r.options.session).toBe("abc123");
+    expect(r.options.pattern).toBe("needle");
+  }
+});
+
+test("--session with an empty value errors", () => {
+  expect(parse(["--session="]).kind).toBe("error");
+});
+
+test("session is undefined without --session", () => {
+  const r = parse(["p"]);
+  if (r.kind === "options") expect(r.options.session).toBe(undefined);
+});
+
+test("help documents --session", () => {
+  expect(HELP).toMatch(/--session <id>/);
+});

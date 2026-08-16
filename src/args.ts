@@ -8,6 +8,7 @@ export const HELP = `cc-grep — grep across Claude Code session transcripts
 
 Usage:
   cc-grep <pattern> [options]
+  cc-grep --session <id> [pattern] [options]
 
 Pattern:
   Substring match by default.
@@ -20,6 +21,10 @@ Scope:
   Dash-prefixed option values require --option=value (e.g. --cwd=-generated).
 
 Filters:
+  --session <id>                Dump one session as a conversation (id or prefix);
+                                pattern becomes optional and, if given, highlights
+  --include-subagents           Keep subagent turns in a --session dump
+                                (excluded by default; search always sees them)
   --role <user|assistant|any>   Restrict by turn role (default: any)
   --since <dur|date>            Only turns at/after (e.g. 7d, 2h, 2026-06-01)
   --until <dur|date>            Only turns at/before
@@ -48,12 +53,14 @@ const ARG_OPTIONS = {
   fixed: { type: "boolean", short: "F" },
   "ignore-case": { type: "boolean", short: "i" },
   root: { type: "string" },
+  session: { type: "string" },
   role: { type: "string" },
   since: { type: "string" },
   until: { type: "string" },
   cwd: { type: "string" },
   branch: { type: "string" },
   "include-meta": { type: "boolean" },
+  "include-subagents": { type: "boolean" },
   context: { type: "string", short: "C" },
   json: { type: "boolean" },
   color: { type: "string" },
@@ -104,7 +111,8 @@ const findControlOption = (args: string[]): "help" | "version" | undefined => {
  * Parse argv (excluding node + script) into structured options. Unknown flags
  * and missing values produce an `error` result rather than throwing, so the CLI
  * can print a message + usage and exit non-zero. The first non-flag argument is
- * the pattern; a leading `--` stops option parsing.
+ * the pattern — required unless `--session` is given; a leading `--` stops
+ * option parsing.
  */
 export function parseArgs(
   argv: string[],
@@ -127,8 +135,15 @@ export function parseArgs(
   if (values.help === true) return { kind: "help" };
   if (values.version === true) return { kind: "version" };
 
+  const session = values.session;
+  if (session !== undefined && session === "") {
+    return err("--session requires a session id (or a unique prefix)");
+  }
+
   const pattern = positionals[0];
-  if (pattern === undefined) return err("missing search pattern");
+  if (pattern === undefined && session === undefined) {
+    return err("missing search pattern");
+  }
   if (positionals[1] !== undefined) {
     return err(`unexpected extra argument: "${positionals[1]}"`);
   }
@@ -197,6 +212,7 @@ export function parseArgs(
     kind: "options",
     options: {
       pattern,
+      session,
       regex: values.regex ?? false,
       fixed: values.fixed ?? false,
       ignoreCase: values["ignore-case"] ?? false,
@@ -207,6 +223,7 @@ export function parseArgs(
       cwd: values.cwd,
       branch: values.branch,
       includeMeta: values["include-meta"] ?? false,
+      includeSubagents: values["include-subagents"] ?? false,
       context,
       resume: values.resume ?? false,
       printResume: values["print-resume"] ?? false,
