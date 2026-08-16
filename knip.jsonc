@@ -1,6 +1,8 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
   // src/cli.ts is inferred from the `bin` field, so it is not listed here.
-  "entry": ["test/**/*.test.js", ".github/scripts/*.mjs"],
-  "project": ["src/**/*.ts", "test/**/*.js", ".github/scripts/*.mjs"],
+  "entry": ["test/**/*.test.js"],
+  "project": ["src/**/*.ts", "test/**/*.js"],
+  // Only ever invoked as a command, never imported.
+  "ignoreDependencies": ["@changesets/cli"],
 }

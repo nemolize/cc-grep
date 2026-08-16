@@ -229,6 +229,41 @@ changed; `post-merge` reinstalls dependencies or toolchain versions when
 `lefthook.yml` only points at [`nemolize/lefthook-configs`](https://github.com/nemolize/lefthook-configs),
 which holds the steps themselves and is shared across repositories.
 
+### Releasing
+
+Releases run on [Changesets](https://changesets.dev) — no version is edited and
+no tag is pushed by hand. Alongside a user-visible change, run:
+
+```
+pnpm exec changeset        # pick patch/minor/major, write the summary
+```
+
+and commit the file it writes under `.changeset/`. Changes invisible to users
+need none — and do not reach for `changeset --empty` to say so: an empty
+changeset makes the workflow treat the repo as mid-release and never publish.
+
+Those changesets accumulate on `main` until the release workflow collects them
+into a **Version Packages** pull request — a version bump plus `CHANGELOG.md`
+entries. That PR is the release: review it, and merging it publishes to npm,
+pushes the `v<version>` tag and creates the GitHub Release.
+
+Merge it with `gh pr merge <number> --admin`. GitHub does not trigger workflows
+from events its own token created, so `ci.yml` never runs on that PR and `main`'s
+required checks stay unreported. The release workflow checks the tree itself
+instead — before opening the PR, and again on the merged commit before publishing.
+
+When it goes wrong:
+
+- `pnpm exec changeset version` needs `GITHUB_TOKEN` locally — it resolves pull
+  request links through the API.
+- A run that publishes to npm and then fails before tagging cannot be recovered
+  by re-running: the version is already published, so the next run finds nothing
+  to do. Tag and release by hand, using that version's `CHANGELOG.md` section as
+  the release body.
+- Merge the release PR only once its own workflow run has finished. A changeset
+  landing on `main` while that run is still updating the PR leaves the merged
+  bump unpublished, and the next release swallows the version.
+
 ## License
 
 MIT

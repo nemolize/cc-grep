@@ -1,158 +1,95 @@
 name: Release
 
-# npm auth uses Trusted Publishing (OIDC) — no NPM_TOKEN secret. The trusted
-# publisher (this repo + this workflow filename) must be registered once on
-# npmjs.com before the first OIDC publish succeeds. pnpm performs the OIDC
-# publish itself, so no npm CLI setup is needed.
+# npmjs.com must have this repo + filename registered as a trusted publisher
+# before the OIDC publish below can work.
 on:
   push:
-    tags:
-      - "v*.*.*"
+    branches: [main]
 
-# Keep the npm comparison and both release mutations in one serialized queue.
+permissions: {}
+
 concurrency:
   group: release
+  # Drop this and a pending publish is evicted. actionlint rejects the key.
   queue: max
 
-permissions:
-  contents: read
-
 jobs:
-  release:
+  select-mode:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      mode: ${{ steps.select-mode.outputs.mode }}
+      publish-plan-artifact-id: ${{ steps.select-mode.outputs.publish-plan-artifact-id }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: nemolize/actions/setup@0a6e86438446cdc086f5dc490688523d8fb8282c # v1.4.0
+
+      - id: select-mode
+        uses: changesets/action/select-mode@198f833dd7d863100ea6e28967bc9a9fdefadb0a # v2.1.0
+
+  version:
+    if: needs.select-mode.outputs.mode == 'version'
+    needs: select-mode
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
-      contents: write # create the GitHub Release
-      id-token: write # request the OIDC token for npm Trusted Publishing
+      contents: write
+      pull-requests: write
     steps:
-      - name: Check out code
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - uses: nemolize/actions/setup@0a6e86438446cdc086f5dc490688523d8fb8282c # v1.4.0
 
-      - name: Set up the toolchain and install dependencies
-        uses: nemolize/actions/setup@0a6e86438446cdc086f5dc490688523d8fb8282c # v1.4.0
+      # ci.yml does not run on the PR this opens — GITHUB_TOKEN authors it.
+      - run: pnpm run lint
+      - run: pnpm run build
+      - run: pnpm run test
 
-      - name: Verify tag matches package.json version
-        run: |
-          tag="${GITHUB_REF_NAME#v}"
-          pkg="$(node -p "require('./package.json').version")"
-          if [ "$tag" != "$pkg" ]; then
-            echo "::error::tag v$tag does not match package.json version $pkg"
-            exit 1
-          fi
-          echo "tag and package.json agree on $pkg"
+      - uses: changesets/action/version@198f833dd7d863100ea6e28967bc9a9fdefadb0a # v2.1.0
 
-      # Re-run the CI checks: a tag push bypasses ci.yml entirely.
-      - name: Lint
-        run: pnpm run lint
+  pack:
+    if: needs.select-mode.outputs.mode == 'publish'
+    needs: select-mode
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      pack-dir-artifact-id: ${{ steps.pack.outputs.pack-dir-artifact-id }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: nemolize/actions/setup@0a6e86438446cdc086f5dc490688523d8fb8282c # v1.4.0
 
-      - name: Type-check
-        run: pnpm run type-check
+      # ci.yml runs on this push too, but nothing here can await another workflow.
+      - run: pnpm run lint
+      - run: pnpm run build
+      - run: pnpm run test
 
-      # Before the tests: test/cli.test.js runs the built CLI from dist/.
-      - name: Build
-        run: pnpm run build
+      - id: pack
+        uses: changesets/action/pack@198f833dd7d863100ea6e28967bc9a9fdefadb0a # v2.1.0
+        with:
+          publish-plan-artifact-id: ${{ needs.select-mode.outputs.publish-plan-artifact-id }}
 
-      - name: Run unit tests
-        run: pnpm run test
+  publish:
+    needs: pack
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: nemolize/actions/setup@0a6e86438446cdc086f5dc490688523d8fb8282c # v1.4.0
 
-      # Prereleases use `next`. Stable backports use `backport` and must not
-      # move npm's `latest` dist-tag or GitHub's Latest release backwards.
-      - name: Classify release
-        id: classify
-        run: |
-          version="${GITHUB_REF_NAME#v}"
-          latest_version=""
-          if [[ "$version" != *-* ]]; then
-            name="$(node -p "require('./package.json').name")"
-            # Only E404 means "no latest yet" — the empty string classify-release.mjs
-            # reads as no previous release. Swallowing other errors here would
-            # classify a backport as `latest` and roll the dist-tag backwards.
-            if out="$(npm view "$name" dist-tags.latest 2>&1)"; then
-              latest_version="$out"
-            elif ! grep -q 'E404' <<<"$out"; then
-              echo "::error::npm view failed for $name dist-tags.latest: $out"
-              exit 1
-            fi
-          fi
-          node .github/scripts/classify-release.mjs \
-            "$version" "$latest_version" >>"$GITHUB_OUTPUT"
-
-      # A re-run can start after the tag was deleted and re-pushed at a
-      # different commit; the checked-out tree is then the original commit
-      # while the tag names another. Query the remote rather than the local
-      # ref, which checkout resolved to GITHUB_SHA by construction. Runs
-      # before publish so a mismatch aborts while both mutations are pending.
-      - name: Verify tag still points at this commit
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          # `gh` carries the token itself; git-over-HTTPS rejects `Bearer` auth,
-          # so `git ls-remote` cannot be authenticated this way.
-          endpoint="repos/${GITHUB_REPOSITORY}/git/ref/tags/${GITHUB_REF_NAME}"
-          if ! out="$(gh api "$endpoint" --jq '[.object.sha, .object.type] | @tsv' 2>&1)"; then
-            # A 404 here is indistinguishable from an unreadable repository —
-            # same body either way — so report both rather than assert one.
-            if grep -q 'Not Found' <<<"$out"; then
-              echo "::error::tag $GITHUB_REF_NAME not found (deleted, or the repository is unreadable with this token)"
-            else
-              echo "::error::gh api failed for $GITHUB_REF_NAME: $out"
-            fi
-            exit 1
-          fi
-          IFS=$'\t' read -r sha type <<<"$out"
-          # An annotated tag resolves to its tag object; peel it to the commit.
-          if [ "$type" = "tag" ]; then
-            if ! out="$(gh api "repos/${GITHUB_REPOSITORY}/git/tags/${sha}" --jq .object.sha 2>&1)"; then
-              echo "::error::gh api failed to peel $GITHUB_REF_NAME: $out"
-              exit 1
-            fi
-            sha="$out"
-          fi
-          # An API response missing `.object.sha` yields an empty field here.
-          if [ -z "$sha" ]; then
-            echo "::error::could not resolve a commit for tag $GITHUB_REF_NAME"
-            exit 1
-          fi
-          if [ "$sha" != "$GITHUB_SHA" ]; then
-            echo "::error::tag $GITHUB_REF_NAME now points at $sha, not the checked-out $GITHUB_SHA"
-            exit 1
-          fi
-          echo "tag $GITHUB_REF_NAME still points at $GITHUB_SHA"
-
-      # Idempotent: a re-run after a partial failure (publish succeeded but the
-      # Release step failed) skips the already-published version instead of
-      # dying on npm's republish block. Only E404 proves the version is absent;
-      # any other failure proves nothing and must fail rather than publish.
-      - name: Publish to npm (Trusted Publishing / OIDC)
-        run: |
-          name="$(node -p "require('./package.json').name")"
-          spec="${name}@${GITHUB_REF_NAME#v}"
-          if err="$(npm view "$spec" version 2>&1 >/dev/null)"; then
-            echo "$spec already published — skipping"
-          elif grep -q 'E404' <<<"$err"; then
-            pnpm publish --provenance --no-git-checks --tag "${{ steps.classify.outputs.npm_tag }}"
-          else
-            echo "::error::npm view failed for $spec: $err"
-            exit 1
-          fi
-
-      # Idempotent + --verify-tag: never recreate a deleted tag off the default
-      # branch (which would point the Release at code npm never published).
-      # Only "release not found" proves the release is absent; any other
-      # failure proves nothing and must fail rather than create.
-      - name: Create GitHub Release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          if err="$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" 2>&1 >/dev/null)"; then
-            echo "$GITHUB_REF_NAME release already exists — skipping"
-          elif grep -qi 'release not found' <<<"$err"; then
-            gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
-              --title "$GITHUB_REF_NAME" --generate-notes --verify-tag \
-              ${{ steps.classify.outputs.github_release_flag }}
-          else
-            echo "::error::gh release view failed for $GITHUB_REF_NAME: $err"
-            exit 1
-          fi
+      - uses: changesets/action/publish@198f833dd7d863100ea6e28967bc9a9fdefadb0a # v2.1.0
+        with:
+          pack-dir-artifact-id: ${{ needs.pack.outputs.pack-dir-artifact-id }}

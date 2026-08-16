@@ -51,6 +51,8 @@
     "prepare": "lefthook install"
   },
   "devDependencies": {
+    "@changesets/changelog-github": "^1.0.0",
+    "@changesets/cli": "^3.0.0",
     "@eslint/compat": "^2.1.0",
     "@eslint/js": "^10.0.1",
     "@types/node": "^22.0.0",
@@ -63,7 +65,6 @@
     "lefthook": "^2.1.10",
     "npm-run-all2": "^9.0.3",
     "prettier": "^3.9.5",
-    "semver": "^7.8.5",
     "typescript": "^5.5.0",
     "typescript-eslint": "^8.63.0",
     "vitest": "^4.1.10"
