@@ -38,7 +38,7 @@ jobs:
       # nemolize/actions/setup takes no inputs, so it cannot carry the mise pin
       # or the per-Node cache key this matrix needs; the steps stay inline here.
       - name: Set up mise (Node ${{ matrix.node-version }} + pnpm)
-        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+        uses: jdx/mise-action@3c2e0cf82a5b2e5249f0d3635a4d83d0ae861518 # v4.2.5
         with:
           # Pin the mise CLI itself; without this the action installs whichever
           # release is latest at cold-cache time. Renovate keeps this current.
