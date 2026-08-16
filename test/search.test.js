@@ -169,13 +169,13 @@ test("a dump excludes subagent turns that share the parent's session id", async 
   });
 });
 
-test("--include-subagents keeps them in the dump", async () => {
+test("--subagents=include keeps them in the dump", async () => {
   await corpusWithSubagent(async (root) => {
     const hits = await collect(
       opts(root, {
         pattern: undefined,
         session: "parent",
-        includeSubagents: true,
+        subagents: "include",
       }),
     );
     expect(hits.length).toBe(2);
@@ -186,6 +186,22 @@ test("plain search still sees subagent turns", async () => {
   await corpusWithSubagent(async (root) => {
     const hits = await collect(opts(root, {}));
     expect(hits.length).toBe(2);
+  });
+});
+
+test("--subagents=exclude drops them from a search", async () => {
+  await corpusWithSubagent(async (root) => {
+    const hits = await collect(opts(root, { subagents: "exclude" }));
+    expect(hits.length).toBe(1);
+    expect(hits[0].turn.isSidechain).toBe(false);
+  });
+});
+
+test("--subagents=only keeps just them in a search", async () => {
+  await corpusWithSubagent(async (root) => {
+    const hits = await collect(opts(root, { subagents: "only" }));
+    expect(hits.length).toBe(1);
+    expect(hits[0].turn.isSidechain).toBe(true);
   });
 });
 

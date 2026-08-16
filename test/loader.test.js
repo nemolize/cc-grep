@@ -76,7 +76,7 @@ test("loadTurns tolerates missing optional fields", async () => {
   });
 });
 
-test("loadTurns carries isSidechain through", async () => {
+test("loadTurns carries isSidechain and agentId through", async () => {
   await withTempDir(async (dir) => {
     const file = join(dir, "s.jsonl");
     await writeFile(
@@ -84,12 +84,35 @@ test("loadTurns carries isSidechain through", async () => {
       JSON.stringify({
         type: "user",
         isSidechain: true,
+        agentId: "a0d4d2d0b4abed822",
         message: { content: "from a subagent" },
       }) + "\n",
     );
     const turns = [];
     for await (const t of loadTurns(file)) turns.push(t);
     expect(turns[0].isSidechain).toBe(true);
+    expect(turns[0].agentId).toBe("a0d4d2d0b4abed822");
+  });
+});
+
+test("agentId is undefined when the field is absent or not a string", async () => {
+  await withTempDir(async (dir) => {
+    const file = join(dir, "s.jsonl");
+    await writeFile(
+      file,
+      JSON.stringify({ type: "user", message: { content: "main" } }) +
+        "\n" +
+        JSON.stringify({
+          type: "user",
+          agentId: null,
+          message: { content: "main" },
+        }) +
+        "\n",
+    );
+    const turns = [];
+    for await (const t of loadTurns(file)) turns.push(t);
+    expect(turns[0].agentId).toBe(undefined);
+    expect(turns[1].agentId).toBe(undefined);
   });
 });
 

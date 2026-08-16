@@ -103,6 +103,7 @@ function parseLine(
       typeof obj["gitBranch"] === "string" ? obj["gitBranch"] : undefined,
     isMeta: obj["isMeta"] === true,
     isSidechain: obj["isSidechain"] === true,
+    agentId: typeof obj["agentId"] === "string" ? obj["agentId"] : undefined,
     textLines,
   };
 }
