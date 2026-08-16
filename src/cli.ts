@@ -167,7 +167,6 @@ async function main(): Promise<number> {
     }
   }
 
-  // Exit 0 on ≥1 hit, 1 on none (grep convention).
   return count > 0 ? 0 : 1;
 }
 

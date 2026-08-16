@@ -40,8 +40,6 @@ jobs:
       - name: Set up the toolchain and install dependencies
         uses: nemolize/actions/setup@0a6e86438446cdc086f5dc490688523d8fb8282c # v1.4.0
 
-      # Runs eslint, prettier and the type-check in parallel; --continue-on-error
-      # reports every failing one instead of stopping at the first.
       - name: Lint
         run: pnpm run lint
 
