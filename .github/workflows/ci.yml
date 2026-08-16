@@ -42,7 +42,7 @@ jobs:
         with:
           # Pin the mise CLI itself; without this the action installs whichever
           # release is latest at cold-cache time. Renovate keeps this current.
-          version: 2026.7.6
+          version: 2026.8.5
           # Include the Node major in the cache key so matrix jobs don't share
           # a single cached install across different Node versions.
           cache_key_prefix: mise-v1-node${{ matrix.node-version }}
