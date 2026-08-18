@@ -12,6 +12,7 @@ import type { Hit, Options } from "./types.js";
  */
 export async function* search(opts: Options): AsyncGenerator<Hit> {
   const matcher = buildMatcher(opts);
+  let yielded = 0;
 
   for await (const file of findTranscripts(opts.root)) {
     for await (const turn of loadTurns(file)) {
@@ -23,6 +24,8 @@ export async function* search(opts: Options): AsyncGenerator<Hit> {
       }
       if (matchedLineIndices.length > 0) {
         yield { turn, matchedLineIndices };
+        yielded++;
+        if (opts.maxCount !== undefined && yielded >= opts.maxCount) return;
       }
     }
   }

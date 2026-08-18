@@ -2,7 +2,13 @@ import { parseArgs as parseNodeArgs } from "node:util";
 
 import { parseSinceUntil } from "./duration.js";
 import { defaultRoot } from "./loader.js";
-import type { ColorMode, Options, RoleFilter, SubagentScope } from "./types.js";
+import type {
+  ColorMode,
+  Options,
+  RoleFilter,
+  SubagentScope,
+  SummaryMode,
+} from "./types.js";
 
 export const HELP = `cc-grep — grep across Claude Code session transcripts
 
@@ -41,12 +47,26 @@ Filters:
 
 Context & output:
   -C, --context <N>    Lines of context around each match (default: 2)
+  -m, --max-count <N>  Stop after N hits
+  -c, --count          Print the number of hits instead of the hits
+  -l, --list-sessions  Print one line per matching session instead of the hits
   --json               Emit one JSON object per hit (pipeline-friendly)
   --color <always|never|auto>   Colorize output (default: auto)
   --resume             Print \`claude --resume <id>\` for the top hit
   --print-resume       Print the resume command for every hit
   -h, --help           Show this help
   -V, --version        Show version
+
+Examples:
+  cc-grep "auth flow"                                  Search every transcript
+  cc-grep "auth flow" -c                               How many hits? (survey first)
+  cc-grep "auth flow" -l                               Which sessions mention it?
+  cc-grep "auth flow" --role user --subagents exclude  Only what the human asked
+  cc-grep "auth flow" --since 30d -m 20                Recent, capped at 20 hits
+  cc-grep --session a1b2c3d4 --role user               Read one session's asks
+
+A broad pattern can match thousands of turns and print megabytes. Survey with
+-c or -l first, then narrow with the filters above or cap with -m.
 `;
 
 export type ParseResult =
@@ -72,6 +92,9 @@ const ARG_OPTIONS = {
   "include-subagents": { type: "boolean" },
   subagents: { type: "string" },
   context: { type: "string", short: "C" },
+  "max-count": { type: "string", short: "m" },
+  count: { type: "boolean", short: "c" },
+  "list-sessions": { type: "boolean", short: "l" },
   json: { type: "boolean" },
   color: { type: "string" },
   resume: { type: "boolean" },
@@ -242,6 +265,31 @@ export function parseArgs(
     return err("missing search pattern");
   }
 
+  let maxCount: number | undefined;
+  if (values["max-count"] !== undefined) {
+    const parsedMaxCount = Number(values["max-count"]);
+    if (
+      values["max-count"] === "" ||
+      !Number.isInteger(parsedMaxCount) ||
+      parsedMaxCount < 1
+    ) {
+      return err(
+        `--max-count must be an integer >= 1 (got "${values["max-count"]}")`,
+      );
+    }
+    maxCount = parsedMaxCount;
+  }
+
+  if (values.count === true && values["list-sessions"] === true) {
+    return err("--count and --list-sessions cannot be combined");
+  }
+  const summary: SummaryMode | undefined =
+    values.count === true
+      ? "count"
+      : values["list-sessions"] === true
+        ? "sessions"
+        : undefined;
+
   const colorValue = values.color;
   if (
     colorValue !== undefined &&
@@ -278,6 +326,8 @@ export function parseArgs(
       includeMeta: values["include-meta"] ?? false,
       subagents,
       context,
+      maxCount,
+      summary,
       resume: values.resume ?? false,
       printResume: values["print-resume"] ?? false,
       json: values.json ?? false,

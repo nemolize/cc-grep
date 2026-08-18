@@ -49,6 +49,9 @@ export type SubagentScope = "include" | "exclude" | "only";
 
 export type ColorMode = "always" | "never" | "auto";
 
+/** Print a tally instead of the turns, so a broad pattern can be narrowed before rendering it. */
+export type SummaryMode = "count" | "sessions";
+
 export interface Options {
   /** Absent when `--session` is given without one: every turn is a hit. */
   pattern?: string | undefined;
@@ -70,6 +73,8 @@ export interface Options {
   /** Undefined leaves each surface its own default — see `passesSubagentScope`. */
   subagents?: SubagentScope | undefined;
   context: number;
+  maxCount?: number | undefined;
+  summary?: SummaryMode | undefined;
   resume: boolean;
   printResume: boolean;
   json: boolean;

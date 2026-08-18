@@ -67,6 +67,31 @@ $ npx @nemolize/cc-grep "auth flow"
 - `--include-meta` — include `isMeta` (skill/system-injected) turns, off by
   default.
 
+### Surveying a broad pattern
+
+A pattern that matches thousands of turns prints megabytes, which is the wrong
+first move — especially when the output is going into an agent's context window.
+Survey first, then narrow:
+
+- `-c, --count` — print how many hits there are, and nothing else.
+- `-l, --list-sessions` — print one line per matching session (full id, hit
+  count, cwd). The id is printed in full, so the line pastes into `--session`.
+- `-m, --max-count <N>` — stop after N hits. This ends the scan rather than
+  filtering afterwards, so it is also much faster than piping through `head`.
+
+```
+$ cc-grep "denyRead" -c
+223
+
+$ cc-grep "denyRead" -l
+3bdb74bf-2a64-400b-94cb-b76a9f0620df    30 hits  ~/dotfiles
+74b82329-00d8-4530-bb8b-c08d85d38c05    25 hits  ~/dotfiles
+…
+```
+
+`--json` pairs with both: `-c` emits `{"hits":223}`, `-l` emits one
+`{"sessionId":…,"hits":…,"cwd":…}` per session.
+
 ### Context & output
 
 - `-C, --context <N>` — lines of context around each match (default: 2).
@@ -172,6 +197,10 @@ header stands alone — every line "matched", so listing them says nothing.
 ## Recipes
 
 ```sh
+# Is X worth searching for at all, and where does it live?
+cc-grep "X" -c
+cc-grep "X" -l
+
 # What did I ask about X in the last month?
 cc-grep "X" --role user --since 30d --subagents exclude
 

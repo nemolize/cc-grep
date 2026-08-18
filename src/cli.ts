@@ -10,13 +10,14 @@ import {
   formatDumpTurn,
   formatHit,
   formatHitJson,
+  formatSessionLine,
   resumeCommand,
   shouldColor,
 } from "./format.js";
 import { isRecord } from "./guards.js";
 import { isReadableDir } from "./loader.js";
 import { search } from "./search.js";
-import type { Hit } from "./types.js";
+import type { Hit, Turn } from "./types.js";
 
 /** Read at runtime rather than hardcoded: a literal drifts from package.json on release. */
 function readVersion(): string {
@@ -90,6 +91,7 @@ async function main(): Promise<number> {
   const resumeLines: string[] = [];
   const dumping = opts.session !== undefined;
   const dumpedSessions = new Set<string>();
+  const sessionTally = new Map<string, { turn: Turn; hits: number }>();
 
   try {
     for await (const hit of search(opts)) {
@@ -102,7 +104,17 @@ async function main(): Promise<number> {
         dumping && !dumpedSessions.has(hit.turn.sessionId ?? "?");
       if (newSession) dumpedSessions.add(hit.turn.sessionId ?? "?");
 
-      if (opts.json) {
+      if (opts.summary !== undefined) {
+        if (opts.summary === "sessions") {
+          const id = hit.turn.sessionId ?? "?";
+          const seen = sessionTally.get(id);
+          if (seen === undefined) {
+            sessionTally.set(id, { turn: hit.turn, hits: 1 });
+          } else {
+            seen.hits++;
+          }
+        }
+      } else if (opts.json) {
         await writeStdout(formatHitJson(hit, opts, home) + "\n");
       } else if (dumping) {
         if (newSession) {
@@ -116,7 +128,7 @@ async function main(): Promise<number> {
         await writeStdout(formatHit(hit, opts, home, color) + "\n\n");
       }
 
-      if (opts.printResume) {
+      if (opts.printResume && opts.summary === undefined) {
         const cmd = resumeCommand(hit);
         // Every turn of a dump carries the same id, so print it once per session.
         if (cmd !== undefined && !(dumping && !newSession)) {
@@ -159,7 +171,25 @@ async function main(): Promise<number> {
     );
   }
 
-  if (!opts.json) {
+  if (opts.summary === "count") {
+    await writeStdout(
+      (opts.json ? JSON.stringify({ hits: count }) : String(count)) + "\n",
+    );
+  } else if (opts.summary === "sessions") {
+    for (const { turn, hits } of sessionTally.values()) {
+      await writeStdout(
+        (opts.json
+          ? JSON.stringify({
+              sessionId: turn.sessionId ?? null,
+              hits,
+              cwd: turn.cwd ?? null,
+            })
+          : formatSessionLine(turn, hits, home, color)) + "\n",
+      );
+    }
+  }
+
+  if (!opts.json && opts.summary === undefined) {
     if (opts.resume && firstHit !== undefined) {
       const cmd = resumeCommand(firstHit);
       if (cmd !== undefined) await writeStdout(`\n${cmd}\n`);
