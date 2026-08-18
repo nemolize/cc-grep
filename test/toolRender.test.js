@@ -125,6 +125,34 @@ test("MultiEdit content is not read as Edit's arguments", () => {
   expect(dec[4]?.text).toBe(undefined);
 });
 
+// Transcripts quote this tool's own output, so `⚙` occurs inside edited
+// content; treating it as a header there hid the rest of the value.
+test("a tool mark inside a value is data, not a new block", () => {
+  const dec = decorateToolLines([
+    "⚙ Edit",
+    "old_string: quoting",
+    "⚙ Edit",
+    "replace_all: false",
+    "after",
+  ]);
+  expect(dec[2]?.suppressed).toBe(undefined);
+  expect(dec[3]?.suppressed).toBe(undefined);
+  expect(dec[4]?.suppressed).toBe(undefined);
+});
+
+// Any earlier argument may itself run over several lines, so a suppressible
+// name below one is content rather than the flag.
+test("a suppressible name is kept once another argument preceded it", () => {
+  const dec = decorateToolLines([
+    "⚙ Edit",
+    "file_path: /x",
+    "replace_all: false",
+    "tail",
+  ]);
+  expect(dec[2]?.suppressed).toBe(undefined);
+  expect(dec[3]?.suppressed).toBe(undefined);
+});
+
 test("content is never suppressed once a value has started", () => {
   const dec = decorateToolLines([
     "⚙ Edit",
@@ -184,13 +212,20 @@ test("a key containing a space is prose, not a field", () => {
 test("a second tool block resets the diff marker", () => {
   const dec = decorateToolLines([
     "⚙ Edit",
-    "new_string: added",
+    "file_path: /x",
     "⚙ Bash",
     "still bash body",
   ]);
-  expect(dec[1].text).toBe("+ added");
   expect(dec[2].toolName).toBe("Bash");
   expect(dec[3]).toBe(undefined);
+});
+
+// Extraction renders both shapes identically, and neither occurs in the corpus
+// (0 of each over 120 transcripts), so this ties to the side that shows content.
+test("inside a diff value the mark loses to the value", () => {
+  const dec = decorateToolLines(["⚙ Edit", "new_string: added", "⚙ Bash"]);
+  expect(dec[2].text).toBe("+ ⚙ Bash");
+  expect(dec[2].toolName).toBe(undefined);
 });
 
 test("an empty-valued field is recognised rather than read as a body line", () => {

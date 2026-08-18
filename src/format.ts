@@ -161,16 +161,13 @@ export function formatHit(
   }
   const ordered = [...show].sort((a, b) => a - b);
 
-  // `--tool` / `--file` already name the calls they selected, with their paths;
-  // the bare names below only stand in when no filter asked for that summary.
+  // The filters name the calls they selected the turn for; these name the call
+  // the body is showing. They differ whenever a turn made more than one.
+  const shown = tools.filter((name) => !summary.includes(`[${name}`));
   const header = cyan(
     `${shortenPath(turn.cwd, home)}  ${formatTimestamp(turn.timestampMs)}  ` +
-      `${sessionField(turn)}  ${turn.role}` +
-      (summary !== ""
-        ? summary
-        : tools.length > 0
-          ? `  [${tools.join(", ")}]`
-          : ""),
+      `${sessionField(turn)}  ${turn.role}${summary}` +
+      (shown.length > 0 ? `  [${shown.join(", ")}]` : ""),
     color,
   );
 

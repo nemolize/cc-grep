@@ -466,6 +466,41 @@ test("a neighbouring block of the same tool keeps its own header", () => {
   expect(body[0]).toBe("  │ [Edit]");
 });
 
+// The filter names why the turn was selected; the body may be showing a
+// different call, and labelling that one with the filter's name is a lie.
+test("a filtered run still names the call the body is showing", () => {
+  const h = hit();
+  h.turn.textLines = ["⚙ Edit", "old_string: MATCHME"];
+  h.turn.toolCalls = [
+    { name: "Bash", paths: [] },
+    { name: "Edit", paths: ["/x"] },
+  ];
+  h.matchedLineIndices = [1];
+  const header = formatHit(
+    h,
+    { ...opts, pattern: "MATCHME", tools: ["Bash"] },
+    "/home/u",
+    false,
+  ).split("\n")[0];
+  expect(header).toContain("[Bash]");
+  expect(header).toContain("[Edit]");
+});
+
+test("the filter's own name is not repeated as a body tag", () => {
+  const h = hit();
+  h.turn.textLines = ["⚙ Edit", "old_string: MATCHME"];
+  h.turn.toolCalls = [{ name: "Edit", paths: ["/home/u/proj/x"] }];
+  h.matchedLineIndices = [1];
+  const header = formatHit(
+    h,
+    { ...opts, pattern: "MATCHME", tools: ["Edit"] },
+    "/home/u",
+    false,
+  ).split("\n")[0];
+  expect(header).toContain("[Edit ~/proj/x]");
+  expect(header.match(/\[Edit/g)).toHaveLength(1);
+});
+
 test("prose does not borrow an earlier call's tool header", () => {
   const h = hit();
   h.turn.textLines = ["⚙ Bash", "command: ls", "", "prose match", "tail"];

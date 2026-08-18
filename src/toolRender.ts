@@ -93,7 +93,9 @@ export function decorateToolLines(
   let seen = new Set<string>();
 
   for (const [i, line] of lines.entries()) {
-    if (line.startsWith(TOOL_MARK)) {
+    // Inside a diff value a `⚙` is quoted data; elsewhere extraction gives no
+    // separator between calls, so only a live marker outranks the header read.
+    if (line.startsWith(TOOL_MARK) && marker === undefined) {
       const name = line.slice(TOOL_MARK.length).trim();
       inBlock = true;
       profile = TOOL_PROFILES.get(name);
@@ -122,6 +124,8 @@ export function decorateToolLines(
       !profile.fields.has(field.key) ||
       seen.has(field.key)
     ) {
+      // This line belongs to some value, so every later one does too.
+      started = true;
       if (marker !== undefined) out[i] = { text: `${marker} ${line}` };
       else if (suppressing) out[i] = { suppressed: true };
       continue;
@@ -138,11 +142,12 @@ export function decorateToolLines(
       continue;
     }
 
-    // Never once a value has started: hiding a line of content is the one
-    // failure this layer must not have, so it only suppresses where it is sure.
+    // Any earlier argument may run over several lines, so a name below one is
+    // content — and hiding content is the one failure this layer must not have.
     marker = undefined;
     suppressing =
       !started && profile.suppressed.get(field.key)?.has(field.rest) === true;
+    started = true;
     out[i] = suppressing ? { suppressed: true } : undefined;
   }
 
