@@ -209,3 +209,67 @@ test("empty root yields no hits, no throw", async () => {
   const hits = await collect(opts("/no/such/dir", {}));
   expect(hits.length).toBe(0);
 });
+
+/** Three sessions that all involve `rules/x.md`; only one edited it. */
+async function corpusTouchingOneFile(fn) {
+  const dir = await mkdtemp(join(tmpdir(), "cc-grep-tool-"));
+  const line = (o) => JSON.stringify(o);
+  const toolUse = (name, input) => ({
+    type: "assistant",
+    timestamp: "2026-07-13T00:00:00Z",
+    message: { content: [{ type: "tool_use", name, input }] },
+  });
+  await writeFile(
+    join(dir, "s.jsonl"),
+    [
+      line({
+        ...toolUse("Edit", {
+          file_path: "/proj/rules/x.md",
+          old_string: "a",
+          new_string: "b",
+        }),
+        sessionId: "editor",
+      }),
+      line({
+        ...toolUse("Read", { file_path: "/proj/rules/x.md" }),
+        sessionId: "reader",
+      }),
+      line({
+        type: "user",
+        sessionId: "talker",
+        timestamp: "2026-07-13T00:00:00Z",
+        message: { content: "we should update rules/x.md some day" },
+      }),
+    ].join("\n"),
+  );
+  try {
+    await fn(dir);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
+test("--tool + --file finds the session that edited a file, not the ones that read or mentioned it", async () => {
+  await corpusTouchingOneFile(async (root) => {
+    const hits = await collect(
+      opts(root, {
+        pattern: undefined,
+        tools: ["Edit", "Write"],
+        file: "rules/x.md",
+      }),
+    );
+    expect(hits.map((h) => h.turn.sessionId)).toEqual(["editor"]);
+  });
+});
+
+test("--file alone still separates a tool call from a prose mention", async () => {
+  await corpusTouchingOneFile(async (root) => {
+    const hits = await collect(
+      opts(root, { pattern: undefined, file: "rules/x.md" }),
+    );
+    expect(hits.map((h) => h.turn.sessionId).sort()).toEqual([
+      "editor",
+      "reader",
+    ]);
+  });
+});

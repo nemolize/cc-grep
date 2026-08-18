@@ -1,4 +1,4 @@
-import type { Options, Turn } from "./types.js";
+import type { Options, ToolCall, Turn } from "./types.js";
 
 /**
  * True if a turn passes every metadata filter (session / role / time window /
@@ -35,7 +35,35 @@ export function passesFilters(turn: Turn, opts: Options): boolean {
     if (turn.gitBranch?.includes(opts.branch) !== true) return false;
   }
 
+  if (opts.tools !== undefined || opts.file !== undefined) {
+    if (!turn.toolCalls.some((call) => matchesToolCall(call, opts))) {
+      return false;
+    }
+  }
+
   return true;
+}
+
+/**
+ * Both conditions must hold on the *same* call: `--tool Edit --file x` asks
+ * which session edited x, not one that read x and edited something else.
+ */
+export function matchesToolCall(call: ToolCall, opts: Options): boolean {
+  if (
+    opts.tools !== undefined &&
+    !opts.tools.some((name) => name.toLowerCase() === call.name.toLowerCase())
+  ) {
+    return false;
+  }
+  return opts.file === undefined || matchingPaths(call, opts.file).length > 0;
+}
+
+/**
+ * Substring, mirroring `--cwd` / `--branch`: the caller has a repo-relative
+ * path in hand, while the transcript records an absolute one.
+ */
+export function matchingPaths(call: ToolCall, file: string): string[] {
+  return call.paths.filter((path) => path.includes(file));
 }
 
 /**

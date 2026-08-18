@@ -56,6 +56,37 @@ test("loadTurns parses user/assistant lines and skips others", async () => {
     expect(turns[0].timestampMs).toBe(Date.parse("2026-07-10T00:00:00Z"));
     expect(turns[1].role).toBe("assistant");
     expect(turns[1].textLines).toEqual(["hi back"]);
+    expect(turns[1].toolCalls).toEqual([]);
+  });
+});
+
+test("loadTurns carries a line's tool calls onto the turn", async () => {
+  await withTempDir(async (dir) => {
+    const file = join(dir, "s.jsonl");
+    await writeFile(
+      file,
+      JSON.stringify({
+        type: "assistant",
+        sessionId: "sess-1",
+        timestamp: "2026-07-10T00:00:00Z",
+        message: {
+          content: [
+            {
+              type: "tool_use",
+              name: "Edit",
+              input: { file_path: "/proj/a.ts", old_string: "x" },
+            },
+          ],
+        },
+      }),
+    );
+
+    const turns = [];
+    for await (const t of loadTurns(file)) turns.push(t);
+
+    expect(turns[0].toolCalls).toEqual([
+      { name: "Edit", paths: ["/proj/a.ts"] },
+    ]);
   });
 });
 

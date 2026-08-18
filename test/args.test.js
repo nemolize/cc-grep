@@ -140,6 +140,8 @@ test.each([
   "--until",
   "--cwd",
   "--branch",
+  "--tool",
+  "--file",
   "-C",
   "--context",
   "--color",
@@ -254,4 +256,52 @@ test("session is undefined without --session", () => {
 
 test("help documents --session", () => {
   expect(HELP).toMatch(/--session <id>/);
+});
+
+test("--tool splits a comma-joined value", () => {
+  const r = parse(["p", "--tool", "Edit,Write,MultiEdit"]);
+  expect(r.kind).toBe("options");
+  if (r.kind === "options") {
+    expect(r.options.tools).toEqual(["Edit", "Write", "MultiEdit"]);
+  }
+});
+
+test("repeated --tool flags accumulate", () => {
+  const r = parse(["p", "--tool", "Edit", "--tool", "Write"]);
+  if (r.kind === "options") expect(r.options.tools).toEqual(["Edit", "Write"]);
+});
+
+test("--tool trims spaces and drops empty entries", () => {
+  const r = parse(["p", "--tool", "Edit, Write,"]);
+  if (r.kind === "options") expect(r.options.tools).toEqual(["Edit", "Write"]);
+});
+
+test("--tool with no usable name errors", () => {
+  expect(parse(["p", "--tool="]).kind).toBe("error");
+  expect(parse(["p", "--tool=,"]).kind).toBe("error");
+});
+
+test("--file with an empty value errors", () => {
+  expect(parse(["p", "--file="]).kind).toBe("error");
+});
+
+test("--tool and --file stand in for the pattern", () => {
+  const byTool = parse(["--tool", "Edit"]);
+  expect(byTool.kind).toBe("options");
+  if (byTool.kind === "options") expect(byTool.options.pattern).toBe(undefined);
+
+  expect(parse(["--file", "src/x.ts"]).kind).toBe("options");
+});
+
+test("tools and file are undefined without their flags", () => {
+  const r = parse(["p"]);
+  if (r.kind === "options") {
+    expect(r.options.tools).toBe(undefined);
+    expect(r.options.file).toBe(undefined);
+  }
+});
+
+test("help documents --tool and --file", () => {
+  expect(HELP).toMatch(/--tool <name\[,name\.\.\.\]>/);
+  expect(HELP).toMatch(/--file <substring>/);
 });

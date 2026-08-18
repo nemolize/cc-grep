@@ -1,3 +1,4 @@
+import { matchesToolCall, matchingPaths } from "./filters.js";
 import { buildMatcher } from "./matcher.js";
 import { TOOL_MARK } from "./textExtract.js";
 import type { ColorMode, Hit, Options, Turn } from "./types.js";
@@ -91,6 +92,29 @@ function toolHeaderIndex(lines: string[], idx: number): number | undefined {
 }
 
 /**
+ * The tool calls a `--tool` / `--file` run selected the turn for, so a hit
+ * reads as "session S edited F at T" without a follow-up `--json | jq`.
+ */
+function toolSummary(turn: Turn, opts: Options, home: string): string {
+  if (opts.tools === undefined && opts.file === undefined) return "";
+
+  const file = opts.file;
+  const parts: string[] = [];
+  for (const call of turn.toolCalls) {
+    if (!matchesToolCall(call, opts)) continue;
+    const paths = file === undefined ? call.paths : matchingPaths(call, file);
+    parts.push(
+      paths.length === 0
+        ? `[${call.name}]`
+        : paths
+            .map((path) => `[${call.name} ${shortenPath(path, home)}]`)
+            .join(" "),
+    );
+  }
+  return parts.length === 0 ? "" : "  " + parts.join(" ");
+}
+
+/**
  * Render one hit as a human-readable block: a header line (cwd / timestamp /
  * session / role) followed by the matched lines with ±context, matches
  * highlighted and prefixed with `>>`.
@@ -104,9 +128,13 @@ export function formatHit(
   const { turn } = hit;
   const header = cyan(
     `${shortenPath(turn.cwd, home)}  ${formatTimestamp(turn.timestampMs)}  ` +
-      `${sessionField(turn)}  ${turn.role}`,
+      `${sessionField(turn)}  ${turn.role}${toolSummary(turn, opts, home)}`,
     color,
   );
+
+  // Without a pattern every line "matched", so a body would dump whole Edits;
+  // the header already carries what the filters selected the turn for.
+  if (opts.pattern === undefined) return header;
 
   const matcher = buildMatcher(opts);
   const matched = new Set(hit.matchedLineIndices);
@@ -186,8 +214,12 @@ export function formatDumpTurn(
 }
 
 /** One JSON object per hit for `--json` (pipeline-friendly, one line each). */
-export function formatHitJson(hit: Hit, home: string): string {
+export function formatHitJson(hit: Hit, opts: Options, home: string): string {
   const { turn } = hit;
+  // A patternless search matches every line, so `matchedLines` would ship whole
+  // `Edit` payloads while saying nothing; a dump still carries the turn in full.
+  const everyLineMatched =
+    opts.pattern === undefined && opts.session === undefined;
   return JSON.stringify({
     file: turn.file,
     lineIndex: turn.lineIndex,
@@ -204,7 +236,10 @@ export function formatHitJson(hit: Hit, home: string): string {
     ...(turn.isSidechain
       ? { agentId: turn.agentId, parentSessionId: turn.sessionId }
       : {}),
-    matchedLines: hit.matchedLineIndices.map((i) => turn.textLines[i]),
+    ...(turn.toolCalls.length > 0 ? { toolCalls: turn.toolCalls } : {}),
+    matchedLines: everyLineMatched
+      ? []
+      : hit.matchedLineIndices.map((i) => turn.textLines[i]),
   });
 }
 

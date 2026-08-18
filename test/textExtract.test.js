@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 
-import { extractTextLines } from "../src/textExtract.js";
+import { extractContent, extractTextLines } from "../src/textExtract.js";
 
 test("plain string content", () => {
   expect(extractTextLines("hello world")).toEqual(["hello world"]);
@@ -150,4 +150,58 @@ test("unrecognised shapes are skipped, not thrown", () => {
 
 test("empty strings are dropped", () => {
   expect(extractTextLines([{ type: "text", text: "" }])).toEqual([]);
+});
+
+test("extractContent collects tool calls alongside the text", () => {
+  const { textLines, toolCalls } = extractContent([
+    { type: "text", text: "before" },
+    { type: "tool_use", name: "Edit", input: { file_path: "/a/b.ts" } },
+  ]);
+  expect(textLines).toEqual(["before", "⚙ Edit", "file_path: /a/b.ts"]);
+  expect(toolCalls).toEqual([{ name: "Edit", paths: ["/a/b.ts"] }]);
+});
+
+test("only path-shaped fields land in a tool call's paths", () => {
+  const { toolCalls } = extractContent([
+    { type: "tool_use", name: "Grep", input: { pattern: "x", path: "/a" } },
+    {
+      type: "tool_use",
+      name: "NotebookEdit",
+      input: { notebook_path: "/n.ipynb" },
+    },
+  ]);
+  expect(toolCalls).toEqual([
+    { name: "Grep", paths: [] },
+    { name: "NotebookEdit", paths: ["/n.ipynb"] },
+  ]);
+});
+
+test("a turn with no tool_use has no tool calls", () => {
+  expect(extractContent([{ type: "text", text: "hi" }]).toolCalls).toEqual([]);
+});
+
+test("a nameless, pathless tool_use is not recorded", () => {
+  expect(extractContent([{ type: "tool_use" }]).toolCalls).toEqual([]);
+  expect(
+    extractContent([{ type: "tool_use", input: { path: "/tmp/x" } }]).toolCalls,
+  ).toEqual([]);
+});
+
+test("a nameless call is still recorded when it carries a path", () => {
+  expect(
+    extractContent([{ type: "tool_use", input: { file_path: "/tmp/x" } }])
+      .toolCalls,
+  ).toEqual([{ name: "", paths: ["/tmp/x"] }]);
+});
+
+test("tool calls nested inside a tool_result are still collected", () => {
+  const { toolCalls } = extractContent([
+    {
+      type: "tool_result",
+      content: [
+        { type: "tool_use", name: "Write", input: { file_path: "/w" } },
+      ],
+    },
+  ]);
+  expect(toolCalls).toEqual([{ name: "Write", paths: ["/w"] }]);
 });

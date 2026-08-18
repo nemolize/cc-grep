@@ -1,3 +1,11 @@
+/** One `tool_use` block, reduced to what `--tool` and `--file` filter on. */
+export interface ToolCall {
+  /** Empty when the block carried no `name`. */
+  name: string;
+  /** Values of the call's path-shaped input fields, in input order. */
+  paths: string[];
+}
+
 /**
  * Normalized view of a single transcript turn (one JSONL line) that survived
  * schema-tolerant parsing. Fields absent in the source line are left undefined
@@ -31,6 +39,8 @@ export interface Turn {
    * logical line; matching and context (`-C N`) operate over this array.
    */
   textLines: string[];
+  /** Structural view of the turn's `tool_use` blocks. */
+  toolCalls: ToolCall[];
 }
 
 export type RoleFilter = "user" | "assistant" | "any";
@@ -52,6 +62,10 @@ export interface Options {
   untilMs?: number | undefined;
   cwd?: string | undefined;
   branch?: string | undefined;
+  /** Tool names to restrict to; a turn passes if it called any of them. */
+  tools?: string[] | undefined;
+  /** Substring matched against path-shaped tool-call inputs. */
+  file?: string | undefined;
   includeMeta: boolean;
   /** Undefined leaves each surface its own default — see `passesSubagentScope`. */
   subagents?: SubagentScope | undefined;

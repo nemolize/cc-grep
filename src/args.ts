@@ -9,6 +9,7 @@ export const HELP = `cc-grep — grep across Claude Code session transcripts
 Usage:
   cc-grep <pattern> [options]
   cc-grep --session <id> [pattern] [options]
+  cc-grep --tool <name[,name...]> [--file <substring>] [pattern] [options]
 
 Pattern:
   Substring match by default.
@@ -32,6 +33,10 @@ Filters:
   --until <dur|date>            Only turns at/before
   --cwd <substring>             Restrict to sessions whose cwd matches
   --branch <substring>          Restrict by gitBranch
+  --tool <name[,name...]>       Only turns that called one of these tools
+                                (case-insensitive, e.g. Edit,Write,MultiEdit)
+  --file <substring>            Only turns whose tool call targets a matching
+                                path (file_path / notebook_path)
   --include-meta                Include isMeta (skill/system) turns
 
 Context & output:
@@ -61,6 +66,8 @@ const ARG_OPTIONS = {
   until: { type: "string" },
   cwd: { type: "string" },
   branch: { type: "string" },
+  tool: { type: "string", multiple: true },
+  file: { type: "string" },
   "include-meta": { type: "boolean" },
   "include-subagents": { type: "boolean" },
   subagents: { type: "string" },
@@ -144,9 +151,6 @@ export function parseArgs(
   }
 
   const pattern = positionals[0];
-  if (pattern === undefined && session === undefined) {
-    return err("missing search pattern");
-  }
   if (positionals[1] !== undefined) {
     return err(`unexpected extra argument: "${positionals[1]}"`);
   }
@@ -212,6 +216,32 @@ export function parseArgs(
     context = parsedContext;
   }
 
+  let tools: string[] | undefined;
+  if (values.tool !== undefined) {
+    tools = values.tool
+      .flatMap((value) => value.split(","))
+      .map((name) => name.trim())
+      .filter((name) => name !== "");
+    if (tools.length === 0) {
+      return err("--tool requires at least one tool name");
+    }
+  }
+
+  if (values.file === "") {
+    return err("--file requires a path substring");
+  }
+
+  // `--tool` / `--file` select turns on their own, so they stand in for the
+  // pattern the same way `--session` does.
+  if (
+    pattern === undefined &&
+    session === undefined &&
+    tools === undefined &&
+    values.file === undefined
+  ) {
+    return err("missing search pattern");
+  }
+
   const colorValue = values.color;
   if (
     colorValue !== undefined &&
@@ -243,6 +273,8 @@ export function parseArgs(
       untilMs,
       cwd: values.cwd,
       branch: values.branch,
+      tools,
+      file: values.file,
       includeMeta: values["include-meta"] ?? false,
       subagents,
       context,

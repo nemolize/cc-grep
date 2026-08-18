@@ -10,8 +10,13 @@ function turn(over) {
     isMeta: false,
     isSidechain: false,
     textLines: ["hi"],
+    toolCalls: [],
     ...over,
   };
+}
+
+function call(name, ...paths) {
+  return { name, paths };
 }
 
 function opts(over) {
@@ -145,4 +150,57 @@ test("--subagents=only overrides the dump's exclude default", () => {
 test("plain search keeps sidechain turns (only a dump excludes them)", () => {
   const sub = turn({ sessionId: "abc", isSidechain: true });
   expect(passesFilters(sub, opts({}))).toBe(true);
+});
+
+test("--tool keeps turns calling any of the named tools", () => {
+  const edited = turn({ toolCalls: [call("Edit", "/a.ts")] });
+  const read = turn({ toolCalls: [call("Read", "/a.ts")] });
+  expect(passesFilters(edited, opts({ tools: ["Edit", "Write"] }))).toBe(true);
+  expect(passesFilters(read, opts({ tools: ["Edit", "Write"] }))).toBe(false);
+});
+
+test("--tool matches regardless of casing", () => {
+  const edited = turn({ toolCalls: [call("Edit", "/a.ts")] });
+  expect(passesFilters(edited, opts({ tools: ["edit"] }))).toBe(true);
+  expect(passesFilters(edited, opts({ tools: ["EDIT"] }))).toBe(true);
+});
+
+test("a turn with no tool calls fails an active --tool", () => {
+  expect(passesFilters(turn({}), opts({ tools: ["Edit"] }))).toBe(false);
+});
+
+test("--file matches a path substring on a tool call", () => {
+  const t = turn({ toolCalls: [call("Edit", "/home/u/proj/src/format.ts")] });
+  expect(passesFilters(t, opts({ file: "src/format.ts" }))).toBe(true);
+  expect(passesFilters(t, opts({ file: "src/loader.ts" }))).toBe(false);
+});
+
+test("--file ignores a path that is only mentioned in prose", () => {
+  const t = turn({
+    textLines: ["let's edit src/format.ts next"],
+    toolCalls: [],
+  });
+  expect(passesFilters(t, opts({ file: "src/format.ts" }))).toBe(false);
+});
+
+test("--file ignores a non-path field carrying the same substring", () => {
+  const t = turn({ toolCalls: [call("Grep")] });
+  expect(passesFilters(t, opts({ file: "src/format.ts" }))).toBe(false);
+});
+
+test("--tool and --file must hold on the same call", () => {
+  // Read the target, edit something else — not "the session that edited it".
+  const split = turn({
+    toolCalls: [call("Read", "/a/target.ts"), call("Edit", "/a/other.ts")],
+  });
+  expect(
+    passesFilters(split, opts({ tools: ["Edit"], file: "target.ts" })),
+  ).toBe(false);
+
+  const edited = turn({
+    toolCalls: [call("Read", "/a/other.ts"), call("Edit", "/a/target.ts")],
+  });
+  expect(
+    passesFilters(edited, opts({ tools: ["Edit"], file: "target.ts" })),
+  ).toBe(true);
 });

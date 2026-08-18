@@ -48,14 +48,18 @@ function hit(over) {
       isMeta: false,
       isSidechain: false,
       textLines: ["line0", "match here", "line2"],
+      toolCalls: [],
       ...over,
     },
     matchedLineIndices: [1],
   };
 }
 
+/** A pattern search — the shape that populates `matchedLines`. */
+const jsonOpts = { pattern: "x" };
+
 test("formatHitJson round-trips through JSON.parse", () => {
-  const line = formatHitJson(hit(), "/home/u");
+  const line = formatHitJson(hit(), jsonOpts, "/home/u");
   const obj = JSON.parse(line);
   expect(obj.role).toBe("user");
   expect(obj.cwdShort).toBe("~/proj");
@@ -73,7 +77,133 @@ test("resumeCommand is undefined without a session id", () => {
   expect(resumeCommand(h)).toBe(undefined);
 });
 
+test("formatHitJson carries the turn's tool calls", () => {
+  const h = hit();
+  h.turn.toolCalls = [{ name: "Edit", paths: ["/a.ts"] }];
+  expect(JSON.parse(formatHitJson(h, jsonOpts, "/home/u")).toolCalls).toEqual([
+    { name: "Edit", paths: ["/a.ts"] },
+  ]);
+});
+
+test("a patternless search sends no matchedLines, only the attribution", () => {
+  const h = hit();
+  h.turn.toolCalls = [{ name: "Edit", paths: ["/a.ts"] }];
+  h.matchedLineIndices = [0, 1, 2];
+  const obj = JSON.parse(
+    formatHitJson(h, { pattern: undefined, tools: ["Edit"] }, "/home/u"),
+  );
+  expect(obj.matchedLines).toEqual([]);
+  expect(obj.toolCalls).toEqual([{ name: "Edit", paths: ["/a.ts"] }]);
+});
+
+test("a patternless dump still sends the turn's lines", () => {
+  const h = hit();
+  h.matchedLineIndices = [0, 1, 2];
+  const obj = JSON.parse(
+    formatHitJson(h, { pattern: undefined, session: "abcdef12" }, "/home/u"),
+  );
+  expect(obj.matchedLines).toEqual(["line0", "match here", "line2"]);
+});
+
+test("formatHitJson omits toolCalls when the turn called nothing", () => {
+  expect(
+    JSON.parse(formatHitJson(hit(), jsonOpts, "/home/u")),
+  ).not.toHaveProperty("toolCalls");
+});
+
 const opts = { context: 2, pattern: "x", regex: false, fixed: true };
+
+test("a --tool run names the tool and its path on the header", () => {
+  const h = hit();
+  h.turn.toolCalls = [{ name: "Edit", paths: ["/home/u/proj/src/a.ts"] }];
+  const header = formatHit(
+    h,
+    { ...opts, tools: ["Edit"] },
+    "/home/u",
+    false,
+  ).split("\n")[0];
+  expect(header).toContain("[Edit ~/proj/src/a.ts]");
+});
+
+test("the header names only the calls the filters selected", () => {
+  const h = hit();
+  h.turn.toolCalls = [
+    { name: "Read", paths: ["/home/u/proj/a.ts"] },
+    { name: "Edit", paths: ["/home/u/proj/b.ts"] },
+  ];
+  const header = formatHit(
+    h,
+    { ...opts, tools: ["Edit"] },
+    "/home/u",
+    false,
+  ).split("\n")[0];
+  expect(header).toContain("[Edit ~/proj/b.ts]");
+  expect(header).not.toContain("Read");
+});
+
+test("a pathless tool call still names the tool", () => {
+  const h = hit();
+  h.turn.toolCalls = [{ name: "Bash", paths: [] }];
+  const header = formatHit(
+    h,
+    { ...opts, tools: ["Bash"] },
+    "/home/u",
+    false,
+  ).split("\n")[0];
+  expect(header).toContain("[Bash]");
+});
+
+test("--file narrows a multi-path call to the paths it asked about", () => {
+  const h = hit();
+  h.turn.toolCalls = [
+    { name: "Edit", paths: ["/home/u/proj/a.ts", "/home/u/proj/b.ts"] },
+  ];
+  const header = formatHit(
+    h,
+    { ...opts, file: "b.ts" },
+    "/home/u",
+    false,
+  ).split("\n")[0];
+  expect(header).toContain("[Edit ~/proj/b.ts]");
+  expect(header).not.toContain("a.ts");
+});
+
+test("without --file every path on the call is named", () => {
+  const h = hit();
+  h.turn.toolCalls = [
+    { name: "Edit", paths: ["/home/u/proj/a.ts", "/home/u/proj/b.ts"] },
+  ];
+  const header = formatHit(
+    h,
+    { ...opts, tools: ["Edit"] },
+    "/home/u",
+    false,
+  ).split("\n")[0];
+  expect(header).toContain("[Edit ~/proj/a.ts]");
+  expect(header).toContain("[Edit ~/proj/b.ts]");
+});
+
+test("no tool summary without --tool / --file", () => {
+  const h = hit();
+  h.turn.toolCalls = [{ name: "Edit", paths: ["/a.ts"] }];
+  expect(formatHit(h, opts, "/home/u", false).split("\n")[0]).not.toContain(
+    "[Edit",
+  );
+});
+
+test("a patternless run prints the header alone, not every line", () => {
+  const h = hit();
+  h.turn.toolCalls = [{ name: "Edit", paths: ["/home/u/proj/a.ts"] }];
+  h.matchedLineIndices = [0, 1, 2];
+  const out = formatHit(
+    h,
+    { ...opts, pattern: undefined, tools: ["Edit"] },
+    "/home/u",
+    false,
+  );
+  expect(out.split("\n")).toHaveLength(1);
+  expect(out).toContain("[Edit ~/proj/a.ts]");
+});
 
 test("a tool header out of context range is pulled in", () => {
   const h = hit();
@@ -204,6 +334,7 @@ test("formatHitJson names the subagent relation instead of leaving it to the pat
   const obj = JSON.parse(
     formatHitJson(
       hit({ isSidechain: true, agentId: "a0d4d2d0b4abed822" }),
+      jsonOpts,
       "/home/u",
     ),
   );
@@ -213,7 +344,7 @@ test("formatHitJson names the subagent relation instead of leaving it to the pat
 });
 
 test("formatHitJson omits the subagent fields on a main-thread hit", () => {
-  const obj = JSON.parse(formatHitJson(hit(), "/home/u"));
+  const obj = JSON.parse(formatHitJson(hit(), jsonOpts, "/home/u"));
   expect(obj.isSubagent).toBe(false);
   expect("agentId" in obj).toBe(false);
   expect("parentSessionId" in obj).toBe(false);

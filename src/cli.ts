@@ -103,7 +103,7 @@ async function main(): Promise<number> {
       if (newSession) dumpedSessions.add(hit.turn.sessionId ?? "?");
 
       if (opts.json) {
-        await writeStdout(formatHitJson(hit, home) + "\n");
+        await writeStdout(formatHitJson(hit, opts, home) + "\n");
       } else if (dumping) {
         if (newSession) {
           const banner = formatDumpBanner(hit.turn, home, color);
@@ -148,6 +148,8 @@ async function main(): Promise<number> {
       opts.untilMs !== undefined ||
       opts.cwd !== undefined ||
       opts.branch !== undefined ||
+      opts.tools !== undefined ||
+      opts.file !== undefined ||
       opts.subagents !== undefined;
     process.stderr.write(
       `cc-grep: no turns for session "${opts.session ?? ""}" — ` +
