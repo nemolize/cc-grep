@@ -130,6 +130,36 @@ test("a pathless tool call still names the tool", () => {
   expect(header).toContain("[Bash]");
 });
 
+test("--file narrows a multi-path call to the paths it asked about", () => {
+  const h = hit();
+  h.turn.toolCalls = [
+    { name: "Edit", paths: ["/home/u/proj/a.ts", "/home/u/proj/b.ts"] },
+  ];
+  const header = formatHit(
+    h,
+    { ...opts, file: "b.ts" },
+    "/home/u",
+    false,
+  ).split("\n")[0];
+  expect(header).toContain("[Edit ~/proj/b.ts]");
+  expect(header).not.toContain("a.ts");
+});
+
+test("without --file every path on the call is named", () => {
+  const h = hit();
+  h.turn.toolCalls = [
+    { name: "Edit", paths: ["/home/u/proj/a.ts", "/home/u/proj/b.ts"] },
+  ];
+  const header = formatHit(
+    h,
+    { ...opts, tools: ["Edit"] },
+    "/home/u",
+    false,
+  ).split("\n")[0];
+  expect(header).toContain("[Edit ~/proj/a.ts]");
+  expect(header).toContain("[Edit ~/proj/b.ts]");
+});
+
 test("no tool summary without --tool / --file", () => {
   const h = hit();
   h.turn.toolCalls = [{ name: "Edit", paths: ["/a.ts"] }];
