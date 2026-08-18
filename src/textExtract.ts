@@ -83,7 +83,7 @@ export const TOOL_MARK = "⚙";
 
 /**
  * Matching only these keeps a `Grep --path` scoping a search distinguishable
- * from an `Edit` of the same file — which session *changed* it is the question.
+ * from an `Edit` of the same file — which session *targeted* it is the question.
  */
 const PATH_FIELDS = new Set(["file_path", "notebook_path"]);
 

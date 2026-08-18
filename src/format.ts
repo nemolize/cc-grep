@@ -93,7 +93,7 @@ function toolHeaderIndex(lines: string[], idx: number): number | undefined {
 
 /**
  * The tool calls a `--tool` / `--file` run selected the turn for, so a hit
- * reads as "session S edited F at T" without a follow-up `--json | jq`.
+ * reads as "session S targeted F at T" without a follow-up `--json | jq`.
  */
 function toolSummary(turn: Turn, opts: Options, home: string): string {
   if (opts.tools === undefined && opts.file === undefined) return "";

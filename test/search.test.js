@@ -210,7 +210,7 @@ test("empty root yields no hits, no throw", async () => {
   expect(hits.length).toBe(0);
 });
 
-/** Three sessions that all involve `rules/x.md`; only one edited it. */
+/** Three sessions that all involve `rules/x.md`; only one called a tool on it. */
 async function corpusTouchingOneFile(fn) {
   const dir = await mkdtemp(join(tmpdir(), "cc-grep-tool-"));
   const line = (o) => JSON.stringify(o);
@@ -249,7 +249,7 @@ async function corpusTouchingOneFile(fn) {
   }
 }
 
-test("--tool + --file finds the session that edited a file, not the ones that read or mentioned it", async () => {
+test("--tool + --file finds the session that targeted a file, not the ones that read or mentioned it", async () => {
   await corpusTouchingOneFile(async (root) => {
     const hits = await collect(
       opts(root, {
@@ -260,6 +260,55 @@ test("--tool + --file finds the session that edited a file, not the ones that re
     );
     expect(hits.map((h) => h.turn.sessionId)).toEqual(["editor"]);
   });
+});
+
+test("--tool + --file matches a call whose paired result reported failure", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "cc-grep-failed-"));
+  try {
+    await writeFile(
+      join(dir, "s.jsonl"),
+      [
+        JSON.stringify({
+          type: "assistant",
+          sessionId: "tried",
+          timestamp: "2026-07-13T00:00:00Z",
+          message: {
+            content: [
+              {
+                type: "tool_use",
+                id: "toolu_1",
+                name: "Edit",
+                input: { file_path: "/proj/rules/x.md", old_string: "stale" },
+              },
+            ],
+          },
+        }),
+        JSON.stringify({
+          type: "user",
+          sessionId: "tried",
+          timestamp: "2026-07-13T00:00:01Z",
+          message: {
+            content: [
+              {
+                type: "tool_result",
+                tool_use_id: "toolu_1",
+                is_error: true,
+                content: "String to replace not found in file.",
+              },
+            ],
+          },
+        }),
+      ].join("\n"),
+    );
+    const hits = await collect(
+      opts(dir, { pattern: undefined, tools: ["Edit"], file: "rules/x.md" }),
+    );
+    // The outcome lives in the paired result, which the filters never read, so
+    // the attempt is reported the same as one that landed.
+    expect(hits.map((h) => h.turn.sessionId)).toEqual(["tried"]);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 test("--file alone still separates a tool call from a prose mention", async () => {

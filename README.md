@@ -22,7 +22,7 @@ Read-only. Nothing ever leaves your machine.
 npx @nemolize/cc-grep <pattern> [options]
 cc-grep <pattern> [options]              # once installed globally
 cc-grep --session <id> [pattern]         # read one session as a conversation
-cc-grep --tool Edit --file <path>        # find which session changed a file
+cc-grep --tool Edit --file <path>        # find which session touched a file
 ```
 
 ```
@@ -63,7 +63,7 @@ $ npx @nemolize/cc-grep "auth flow"
   `--tool Edit,Write` are the same request.
 - `--file <substring>` — restrict to turns whose tool call targets a matching
   path (`file_path` / `notebook_path`). See
-  [Finding which session changed a file](#finding-which-session-changed-a-file).
+  [Finding which session touched a file](#finding-which-session-touched-a-file).
 - `--include-meta` — include `isMeta` (skill/system-injected) turns, off by
   default.
 
@@ -171,7 +171,7 @@ includes them, a `--session` dump excludes them:
 `--json` names the relation rather than leaving it to be inferred from the file
 path: `isSubagent`, plus `agentId` and `parentSessionId` on a subagent hit.
 
-## Finding which session changed a file
+## Finding which session touched a file
 
 "Who last touched this file, and in what conversation" is the transcript
 analogue of `git log --follow`, and it is what an unexplained working-tree
@@ -194,6 +194,11 @@ and the matched lines come back as usual, still restricted to those turns.
 
 `--file` matches a substring of the path, so a repo-relative fragment finds an
 absolute path in the transcript. `--tool` is case-insensitive and repeatable.
+
+The match is on the call, not its outcome: a transcript records that an `Edit`
+was attempted, and whether it landed lives in the paired result. An edit that
+failed on a stale `old_string` still matches — which is usually what you want,
+since the attempt is itself evidence that session was working on the file.
 
 `--json` carries a `toolCalls` array (`{name, paths}`) on any hit that made one,
 so the attribution is machine-readable without re-parsing the rendered lines.
@@ -219,7 +224,7 @@ cc-grep "X" --resume
 # Only sessions from a specific project
 cc-grep "X" --cwd myrepo
 
-# Which session edited this file, and when?
+# Which session touched this file, and when?
 cc-grep --tool Edit,Write --file src/format.ts --since 7d
 
 # List the unique sessions that mention X
