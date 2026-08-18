@@ -224,7 +224,7 @@ test("a tool header out of context range is pulled in", () => {
     "/home/u",
     false,
   );
-  expect(out).toMatch(/⚙ Bash/);
+  expect(out.split("\n")[0]).toMatch(/ {2}\[Bash\]$/);
 });
 
 test("dump banner carries session, cwd and branch once", () => {
@@ -351,6 +351,99 @@ test("formatHitJson omits the subagent fields on a main-thread hit", () => {
   expect("parentSessionId" in obj).toBe(false);
 });
 
+test("a dump renders tool calls the same way, keeping the marker inline", () => {
+  const h = hit();
+  h.turn.textLines = ["⚙ Edit", "old_string: before", "new_string: after"];
+  h.matchedLineIndices = [2];
+  const out = formatDumpTurn(h, { ...opts, pattern: "after" }, false);
+  expect(out.split("\n").slice(1)).toEqual([
+    "  │ [Edit]",
+    "  │ - before",
+    "  │ >> + after",
+  ]);
+});
+
+test("a dump keeps a suppressed field, since it never elides", () => {
+  const h = hit();
+  h.turn.textLines = ["⚙ Edit", "replace_all: false", "file_path: /tmp/x"];
+  h.matchedLineIndices = [2];
+  const out = formatDumpTurn(h, { ...opts, pattern: "/tmp/x" }, false);
+  expect(out).toContain("replace_all: false");
+});
+
+test("a tool hit names its tool on the header instead of in the body", () => {
+  const h = hit();
+  h.turn.textLines = ["⚙ Edit", "file_path: /tmp/x", "old_string: needle"];
+  h.matchedLineIndices = [2];
+  const out = formatHit(h, { ...opts, pattern: "needle" }, "/home/u", false);
+  expect(out.split("\n")[0]).toMatch(/ {2}\[Edit\]$/);
+  expect(out).not.toContain("⚙");
+});
+
+test("a matched tool header renders as the tag, not the raw mark", () => {
+  const h = hit();
+  h.turn.textLines = ["⚙ Edit", "file_path: /tmp/x"];
+  h.matchedLineIndices = [0];
+  const out = formatHit(h, { ...opts, pattern: "Edit" }, "/home/u", false);
+  expect(out).not.toContain("⚙");
+  expect(out.split("\n")[1]).toBe("  │ >> [Edit]");
+});
+
+test("edit strings render as diff sides rather than field labels", () => {
+  const h = hit();
+  h.turn.textLines = ["⚙ Edit", "old_string: before", "new_string: after"];
+  h.matchedLineIndices = [2];
+  const out = formatHit(h, { ...opts, pattern: "after" }, "/home/u", false);
+  expect(out.split("\n").slice(1)).toEqual(["  │ - before", "  │ >> + after"]);
+});
+
+test("a noise field is hidden from context but still shows when it matched", () => {
+  const h = hit();
+  h.turn.textLines = ["⚙ Edit", "replace_all: false", "file_path: /tmp/x"];
+  h.matchedLineIndices = [2];
+  expect(
+    formatHit(h, { ...opts, pattern: "/tmp/x" }, "/home/u", false),
+  ).not.toContain("replace_all");
+
+  h.matchedLineIndices = [1];
+  expect(
+    formatHit(h, { ...opts, pattern: "replace_all" }, "/home/u", false),
+  ).toContain("replace_all");
+});
+
+test("highlight ranges follow the decorated text, not the extracted line", () => {
+  const h = hit();
+  h.turn.textLines = ["⚙ Edit", "new_string: needle"];
+  h.matchedLineIndices = [1];
+  const out = formatHit(h, { ...opts, pattern: "needle" }, "/home/u", true);
+  // A raw-offset range would have shifted the highlight past the marker.
+  expect(out).toContain("+ \x1b[1;31mneedle\x1b[0m");
+});
+
+test("prose is never reinterpreted as tool fields", () => {
+  const h = hit();
+  h.turn.textLines = ["old_string: this is prose", "tail"];
+  h.matchedLineIndices = [0];
+  const out = formatHit(h, { ...opts, pattern: "prose" }, "/home/u", false);
+  expect(out).toContain("old_string: this is prose");
+});
+
+// The pre-decoration renderer printed `⚙ Bash` here; dropping it silently would
+// leave the block's own lines unattributed.
+test("a header pulled in only as context stays inline, keeping attribution", () => {
+  const h = hit();
+  h.turn.textLines = ["⚙ Bash", "command: ls", "", "prose match"];
+  h.matchedLineIndices = [3];
+  const out = formatHit(
+    h,
+    { ...opts, context: 3, pattern: "prose match" },
+    "/home/u",
+    false,
+  );
+  expect(out.split("\n")[0]).not.toContain("[Bash]");
+  expect(out).toContain("  │ [Bash]");
+});
+
 test("prose does not borrow an earlier call's tool header", () => {
   const h = hit();
   h.turn.textLines = ["⚙ Bash", "command: ls", "", "prose match", "tail"];
@@ -361,7 +454,7 @@ test("prose does not borrow an earlier call's tool header", () => {
     "/home/u",
     false,
   );
-  expect(out).not.toMatch(/⚙ Bash/);
+  expect(out.split("\n")[0]).not.toContain("[Bash]");
 });
 
 test("formatSessionLine prints the full id so it pastes into --session", () => {

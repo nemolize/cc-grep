@@ -1,6 +1,7 @@
 import { matchesToolCall, matchingPaths } from "./filters.js";
 import { buildMatcher } from "./matcher.js";
 import { TOOL_MARK } from "./textExtract.js";
+import { decorateToolLines } from "./toolRender.js";
 import type { ColorMode, Hit, Options, Turn } from "./types.js";
 
 const RESET = "\x1b[0m";
@@ -126,38 +127,71 @@ export function formatHit(
   color: boolean,
 ): string {
   const { turn } = hit;
-  const header = cyan(
-    `${shortenPath(turn.cwd, home)}  ${formatTimestamp(turn.timestampMs)}  ` +
-      `${sessionField(turn)}  ${turn.role}${toolSummary(turn, opts, home)}`,
-    color,
-  );
+  const summary = toolSummary(turn, opts, home);
 
   // Without a pattern every line "matched", so a body would dump whole Edits;
   // the header already carries what the filters selected the turn for.
-  if (opts.pattern === undefined) return header;
+  if (opts.pattern === undefined) {
+    return cyan(
+      `${shortenPath(turn.cwd, home)}  ${formatTimestamp(turn.timestampMs)}  ` +
+        `${sessionField(turn)}  ${turn.role}${summary}`,
+      color,
+    );
+  }
 
   const matcher = buildMatcher(opts);
   const matched = new Set(hit.matchedLineIndices);
+  const decorations = decorateToolLines(turn.textLines);
 
   const show = new Set<number>();
+  const tools: string[] = [];
   for (const idx of hit.matchedLineIndices) {
     for (let i = idx - opts.context; i <= idx + opts.context; i++) {
       if (i >= 0 && i < turn.textLines.length) show.add(i);
     }
-    const header = toolHeaderIndex(turn.textLines, idx);
-    if (header !== undefined) show.add(header);
+    const at = toolHeaderIndex(turn.textLines, idx);
+    if (at === undefined) continue;
+    show.add(at);
+    const name = decorations[at]?.toolName;
+    if (name !== undefined && name !== "" && !tools.includes(name)) {
+      tools.push(name);
+    }
   }
   const ordered = [...show].sort((a, b) => a - b);
 
-  const body = ordered.map((i) => {
+  // `--tool` / `--file` already name the calls they selected, with their paths;
+  // the bare names below only stand in when no filter asked for that summary.
+  const header = cyan(
+    `${shortenPath(turn.cwd, home)}  ${formatTimestamp(turn.timestampMs)}  ` +
+      `${sessionField(turn)}  ${turn.role}` +
+      (summary !== ""
+        ? summary
+        : tools.length > 0
+          ? `  [${tools.join(", ")}]`
+          : ""),
+    color,
+  );
+
+  const body: string[] = [];
+  for (const i of ordered) {
     const raw = turn.textLines[i] ?? "";
+    const dec = decorations[i];
+    // A header whose name never reached the hit header belongs to a neighbouring
+    // block; printing it inline keeps the attribution the old renderer carried.
+    const orphanHeader =
+      dec?.toolName !== undefined && !tools.includes(dec.toolName);
+    // A suppressed line that matched still prints — hiding it would drop the
+    // very hit the user searched for.
+    if (dec?.suppressed === true && !matched.has(i) && !orphanHeader) continue;
+    // Ranges are recomputed on the shown text: a decorated line is not the
+    // extracted one, so the raw line's offsets would highlight the wrong span.
+    const text = dec?.text ?? raw;
     if (matched.has(i)) {
-      const shown = highlight(raw, matcher.ranges(raw), color);
-      return `  │ >> ${shown}`;
+      body.push(`  │ >> ${highlight(text, matcher.ranges(text), color)}`);
+      continue;
     }
-    const dim = color ? DIM + raw + RESET : raw;
-    return `  │ ${dim}`;
-  });
+    body.push(`  │ ${color ? DIM + text + RESET : text}`);
+  }
 
   return [header, ...body].join("\n");
 }
@@ -221,13 +255,17 @@ export function formatDumpTurn(
   const matched = new Set(hit.matchedLineIndices);
   // With no pattern every line is "matched"; highlighting all of them is noise.
   const highlighting = opts.pattern !== undefined;
+  const decorations = decorateToolLines(turn.textLines);
 
-  // `>>` keeps the match visible under `--color never` and through a pipe.
-  const body = turn.textLines.map((raw, i) =>
-    highlighting && matched.has(i)
-      ? `  │ >> ${highlight(raw, matcher.ranges(raw), color)}`
-      : `  │ ${raw}`,
-  );
+  // The marker stays inline rather than moving to the header: one turn can hold
+  // several calls, and a hoisted list would not say which block each name owns.
+  const body = turn.textLines.map((raw, i) => {
+    const text = decorations[i]?.text ?? raw;
+    // `>>` keeps the match visible under `--color never` and through a pipe.
+    return highlighting && matched.has(i)
+      ? `  │ >> ${highlight(text, matcher.ranges(text), color)}`
+      : `  │ ${text}`;
+  });
 
   return [header, ...body].join("\n");
 }
