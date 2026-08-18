@@ -39,7 +39,7 @@ export interface Turn {
    * logical line; matching and context (`-C N`) operate over this array.
    */
   textLines: string[];
-  /** Structural view of the turn's `tool_use` blocks; empty when it had none. */
+  /** Structural view of the turn's `tool_use` blocks. */
   toolCalls: ToolCall[];
 }
 

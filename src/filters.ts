@@ -51,19 +51,19 @@ export function passesFilters(turn: Turn, opts: Options): boolean {
 export function matchesToolCall(call: ToolCall, opts: Options): boolean {
   if (
     opts.tools !== undefined &&
-    // Case-insensitive: the canonical casing (`Edit`, `MultiEdit`) is not what
-    // a hurried `--tool edit` types.
     !opts.tools.some((name) => name.toLowerCase() === call.name.toLowerCase())
   ) {
     return false;
   }
-  // Substring, mirroring `--cwd` / `--branch`: the caller has a repo-relative
-  // path in hand, while the transcript records an absolute one.
-  const file = opts.file;
-  if (file !== undefined && !call.paths.some((path) => path.includes(file))) {
-    return false;
-  }
-  return true;
+  return opts.file === undefined || matchingPaths(call, opts.file).length > 0;
+}
+
+/**
+ * Substring, mirroring `--cwd` / `--branch`: the caller has a repo-relative
+ * path in hand, while the transcript records an absolute one.
+ */
+export function matchingPaths(call: ToolCall, file: string): string[] {
+  return call.paths.filter((path) => path.includes(file));
 }
 
 /**

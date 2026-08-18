@@ -218,7 +218,6 @@ export function parseArgs(
 
   let tools: string[] | undefined;
   if (values.tool !== undefined) {
-    // Repeated flags and one comma-joined value are the same request.
     tools = values.tool
       .flatMap((value) => value.split(","))
       .map((name) => name.trim())
@@ -228,7 +227,7 @@ export function parseArgs(
     }
   }
 
-  if (values.file !== undefined && values.file === "") {
+  if (values.file === "") {
     return err("--file requires a path substring");
   }
 

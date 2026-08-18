@@ -166,6 +166,8 @@ absolute path in the transcript. `--tool` is case-insensitive and repeatable.
 
 `--json` carries a `toolCalls` array (`{name, paths}`) on any hit that made one,
 so the attribution is machine-readable without re-parsing the rendered lines.
+On a patternless search `matchedLines` comes back empty for the same reason the
+header stands alone — every line "matched", so listing them says nothing.
 
 ## Recipes
 

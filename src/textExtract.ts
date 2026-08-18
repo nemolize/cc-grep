@@ -17,9 +17,8 @@ export interface ExtractedContent {
  * gracefully. A block's own text may contain newlines; those are split so that
  * matching and `-C N` context operate per visual line.
  *
- * Tool calls are collected structurally alongside the text: the rendered lines
- * lose which field a value came from, and `--file` has to tell a path that was
- * edited from one merely mentioned in prose.
+ * Tool calls are collected structurally too: the rendered lines lose which
+ * field a value came from.
  */
 export function extractContent(content: unknown): ExtractedContent {
   const out: string[] = [];

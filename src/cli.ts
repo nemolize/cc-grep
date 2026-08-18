@@ -103,7 +103,7 @@ async function main(): Promise<number> {
       if (newSession) dumpedSessions.add(hit.turn.sessionId ?? "?");
 
       if (opts.json) {
-        await writeStdout(formatHitJson(hit, home) + "\n");
+        await writeStdout(formatHitJson(hit, opts, home) + "\n");
       } else if (dumping) {
         if (newSession) {
           const banner = formatDumpBanner(hit.turn, home, color);

@@ -55,8 +55,11 @@ function hit(over) {
   };
 }
 
+/** A pattern search — the shape that populates `matchedLines`. */
+const jsonOpts = { pattern: "x" };
+
 test("formatHitJson round-trips through JSON.parse", () => {
-  const line = formatHitJson(hit(), "/home/u");
+  const line = formatHitJson(hit(), jsonOpts, "/home/u");
   const obj = JSON.parse(line);
   expect(obj.role).toBe("user");
   expect(obj.cwdShort).toBe("~/proj");
@@ -77,15 +80,35 @@ test("resumeCommand is undefined without a session id", () => {
 test("formatHitJson carries the turn's tool calls", () => {
   const h = hit();
   h.turn.toolCalls = [{ name: "Edit", paths: ["/a.ts"] }];
-  expect(JSON.parse(formatHitJson(h, "/home/u")).toolCalls).toEqual([
+  expect(JSON.parse(formatHitJson(h, jsonOpts, "/home/u")).toolCalls).toEqual([
     { name: "Edit", paths: ["/a.ts"] },
   ]);
 });
 
-test("formatHitJson omits toolCalls when the turn called nothing", () => {
-  expect(JSON.parse(formatHitJson(hit(), "/home/u"))).not.toHaveProperty(
-    "toolCalls",
+test("a patternless search sends no matchedLines, only the attribution", () => {
+  const h = hit();
+  h.turn.toolCalls = [{ name: "Edit", paths: ["/a.ts"] }];
+  h.matchedLineIndices = [0, 1, 2];
+  const obj = JSON.parse(
+    formatHitJson(h, { pattern: undefined, tools: ["Edit"] }, "/home/u"),
   );
+  expect(obj.matchedLines).toEqual([]);
+  expect(obj.toolCalls).toEqual([{ name: "Edit", paths: ["/a.ts"] }]);
+});
+
+test("a patternless dump still sends the turn's lines", () => {
+  const h = hit();
+  h.matchedLineIndices = [0, 1, 2];
+  const obj = JSON.parse(
+    formatHitJson(h, { pattern: undefined, session: "abcdef12" }, "/home/u"),
+  );
+  expect(obj.matchedLines).toEqual(["line0", "match here", "line2"]);
+});
+
+test("formatHitJson omits toolCalls when the turn called nothing", () => {
+  expect(
+    JSON.parse(formatHitJson(hit(), jsonOpts, "/home/u")),
+  ).not.toHaveProperty("toolCalls");
 });
 
 const opts = { context: 2, pattern: "x", regex: false, fixed: true };
@@ -311,6 +334,7 @@ test("formatHitJson names the subagent relation instead of leaving it to the pat
   const obj = JSON.parse(
     formatHitJson(
       hit({ isSidechain: true, agentId: "a0d4d2d0b4abed822" }),
+      jsonOpts,
       "/home/u",
     ),
   );
@@ -320,7 +344,7 @@ test("formatHitJson names the subagent relation instead of leaving it to the pat
 });
 
 test("formatHitJson omits the subagent fields on a main-thread hit", () => {
-  const obj = JSON.parse(formatHitJson(hit(), "/home/u"));
+  const obj = JSON.parse(formatHitJson(hit(), jsonOpts, "/home/u"));
   expect(obj.isSubagent).toBe(false);
   expect("agentId" in obj).toBe(false);
   expect("parentSessionId" in obj).toBe(false);

@@ -1,4 +1,4 @@
-import { matchesToolCall } from "./filters.js";
+import { matchesToolCall, matchingPaths } from "./filters.js";
 import { buildMatcher } from "./matcher.js";
 import { TOOL_MARK } from "./textExtract.js";
 import type { ColorMode, Hit, Options, Turn } from "./types.js";
@@ -102,10 +102,7 @@ function toolSummary(turn: Turn, opts: Options, home: string): string {
   const parts: string[] = [];
   for (const call of turn.toolCalls) {
     if (!matchesToolCall(call, opts)) continue;
-    const paths =
-      file === undefined
-        ? call.paths
-        : call.paths.filter((path) => path.includes(file));
+    const paths = file === undefined ? call.paths : matchingPaths(call, file);
     parts.push(
       paths.length === 0
         ? `[${call.name}]`
@@ -217,8 +214,12 @@ export function formatDumpTurn(
 }
 
 /** One JSON object per hit for `--json` (pipeline-friendly, one line each). */
-export function formatHitJson(hit: Hit, home: string): string {
+export function formatHitJson(hit: Hit, opts: Options, home: string): string {
   const { turn } = hit;
+  // A patternless search matches every line, so `matchedLines` would ship whole
+  // `Edit` payloads while saying nothing; a dump still carries the turn in full.
+  const everyLineMatched =
+    opts.pattern === undefined && opts.session === undefined;
   return JSON.stringify({
     file: turn.file,
     lineIndex: turn.lineIndex,
@@ -236,7 +237,9 @@ export function formatHitJson(hit: Hit, home: string): string {
       ? { agentId: turn.agentId, parentSessionId: turn.sessionId }
       : {}),
     ...(turn.toolCalls.length > 0 ? { toolCalls: turn.toolCalls } : {}),
-    matchedLines: hit.matchedLineIndices.map((i) => turn.textLines[i]),
+    matchedLines: everyLineMatched
+      ? []
+      : hit.matchedLineIndices.map((i) => turn.textLines[i]),
   });
 }
 
