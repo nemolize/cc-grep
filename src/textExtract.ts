@@ -38,7 +38,7 @@ function collect(
   node: unknown,
   out: string[],
   depth: number,
-  toolCalls: ToolCall[],
+  toolCalls: ToolCall[] | null,
 ): void {
   if (node == null || depth > MAX_DEPTH) return;
 
@@ -63,8 +63,9 @@ function collect(
       collect(block["thinking"], out, depth + 1, toolCalls);
       return;
     case "tool_result":
-      // `content` is a string or an array of `{type:"text", text}` blocks.
-      collect(block["content"], out, depth + 1, toolCalls);
+      // A tool's output is data: a `tool_use` echoed back inside it is not a
+      // call the session made, so collection stops here (text still extracts).
+      collect(block["content"], out, depth + 1, null);
       return;
     case "tool_use":
       collectToolUse(block, out, toolCalls);
@@ -93,7 +94,7 @@ const PATH_FIELDS = new Set(["file_path", "notebook_path"]);
 function collectToolUse(
   block: Record<string, unknown>,
   out: string[],
-  toolCalls: ToolCall[],
+  toolCalls: ToolCall[] | null,
 ): void {
   const name = typeof block["name"] === "string" ? block["name"] : "";
   if (name !== "") out.push(`${TOOL_MARK} ${name}`);
@@ -113,7 +114,7 @@ function collectToolUse(
 
   // A nameless, pathless call matches neither filter and would only render as
   // an empty `[]` label.
-  if (name !== "" || paths.length > 0) toolCalls.push({ name, paths });
+  if (name !== "" || paths.length > 0) toolCalls?.push({ name, paths });
 }
 
 /**

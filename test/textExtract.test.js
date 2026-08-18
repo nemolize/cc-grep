@@ -194,8 +194,8 @@ test("a nameless call is still recorded when it carries a path", () => {
   ).toEqual([{ name: "", paths: ["/tmp/x"] }]);
 });
 
-test("tool calls nested inside a tool_result are still collected", () => {
-  const { toolCalls } = extractContent([
+test("a tool_use echoed back inside a tool_result is not a collected call", () => {
+  const { textLines, toolCalls } = extractContent([
     {
       type: "tool_result",
       content: [
@@ -203,5 +203,19 @@ test("tool calls nested inside a tool_result are still collected", () => {
       ],
     },
   ]);
-  expect(toolCalls).toEqual([{ name: "Write", paths: ["/w"] }]);
+  expect(toolCalls).toEqual([]);
+  expect(textLines).toEqual(["⚙ Write", "file_path: /w"]);
+});
+
+test("a real call is still collected after a tool_result in the same turn", () => {
+  const { toolCalls } = extractContent([
+    {
+      type: "tool_result",
+      content: [
+        { type: "tool_use", name: "Write", input: { file_path: "/w" } },
+      ],
+    },
+    { type: "tool_use", name: "Edit", input: { file_path: "/e" } },
+  ]);
+  expect(toolCalls).toEqual([{ name: "Edit", paths: ["/e"] }]);
 });
