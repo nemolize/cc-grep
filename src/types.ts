@@ -49,7 +49,6 @@ export type SubagentScope = "include" | "exclude" | "only";
 
 export type ColorMode = "always" | "never" | "auto";
 
-/** Print a tally instead of the turns, so a broad pattern can be narrowed before rendering it. */
 export type SummaryMode = "count" | "sessions";
 
 export interface Options {

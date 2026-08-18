@@ -167,19 +167,17 @@ export function formatHit(
  * form headers use, so the line pastes straight into `--session`.
  */
 export function formatSessionLine(
-  turn: Turn,
+  sessionId: string | undefined,
+  cwd: string | undefined,
   hits: number,
   home: string,
   color: boolean,
 ): string {
-  const id =
-    turn.sessionId === undefined || turn.sessionId === ""
-      ? "?"
-      : turn.sessionId;
+  const id = sessionId === undefined || sessionId === "" ? "?" : sessionId;
   const unit = hits === 1 ? "hit " : "hits";
   return (
     cyan(id, color) +
-    `  ${String(hits).padStart(4)} ${unit}  ${shortenPath(turn.cwd, home)}`
+    `  ${String(hits).padStart(4)} ${unit}  ${shortenPath(cwd, home)}`
   );
 }
 

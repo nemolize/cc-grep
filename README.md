@@ -75,9 +75,13 @@ Survey first, then narrow:
 
 - `-c, --count` — print how many hits there are, and nothing else.
 - `-l, --list-sessions` — print one line per matching session (full id, hit
-  count, cwd). The id is printed in full, so the line pastes into `--session`.
-- `-m, --max-count <N>` — stop after N hits. This ends the scan rather than
-  filtering afterwards, so it is also much faster than piping through `head`.
+  count, cwd), most hits first. The id is printed in full, so the line pastes
+  into `--session`.
+- `-m, --max-count <N>` — stop after N hits, and note on stderr that it capped.
+  Piping through `head` also ends the scan (the EPIPE guard sees the closed
+  pipe), so this is not about speed: `-m` stops at exactly hit N rather than at
+  whatever the pipe buffer held, never cuts a hit mid-block, keeps the exit
+  status meaningful, and composes with `-c`.
 
 ```
 $ cc-grep "denyRead" -c
@@ -89,8 +93,10 @@ $ cc-grep "denyRead" -l
 …
 ```
 
-`--json` pairs with both: `-c` emits `{"hits":223}`, `-l` emits one
-`{"sessionId":…,"hits":…,"cwd":…}` per session.
+`--json` pairs with both: `-c` emits a single `{"hits":223}`, `-l` emits one
+`{"sessionId":…,"hits":…,"cwd":…}` per session. Neither composes with
+`--resume` / `--print-resume` — a summary prints no hit to resume, so the
+combination is a usage error rather than a silently dropped flag.
 
 ### Context & output
 

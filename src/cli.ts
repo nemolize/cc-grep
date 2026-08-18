@@ -17,7 +17,7 @@ import {
 import { isRecord } from "./guards.js";
 import { isReadableDir } from "./loader.js";
 import { search } from "./search.js";
-import type { Hit, Turn } from "./types.js";
+import type { Hit } from "./types.js";
 
 /** Read at runtime rather than hardcoded: a literal drifts from package.json on release. */
 function readVersion(): string {
@@ -91,7 +91,12 @@ async function main(): Promise<number> {
   const resumeLines: string[] = [];
   const dumping = opts.session !== undefined;
   const dumpedSessions = new Set<string>();
-  const sessionTally = new Map<string, { turn: Turn; hits: number }>();
+  // Keyed by file for a turn with no session id: those rows are unrelated to
+  // each other, and a shared "?" key would merge them into one fake session.
+  const sessionTally = new Map<
+    string,
+    { sessionId?: string | undefined; cwd?: string | undefined; hits: number }
+  >();
 
   try {
     for await (const hit of search(opts)) {
@@ -104,16 +109,20 @@ async function main(): Promise<number> {
         dumping && !dumpedSessions.has(hit.turn.sessionId ?? "?");
       if (newSession) dumpedSessions.add(hit.turn.sessionId ?? "?");
 
-      if (opts.summary !== undefined) {
-        if (opts.summary === "sessions") {
-          const id = hit.turn.sessionId ?? "?";
-          const seen = sessionTally.get(id);
-          if (seen === undefined) {
-            sessionTally.set(id, { turn: hit.turn, hits: 1 });
-          } else {
-            seen.hits++;
-          }
+      if (opts.summary === "sessions") {
+        const key = hit.turn.sessionId ?? `\0${hit.turn.file}`;
+        const seen = sessionTally.get(key);
+        if (seen === undefined) {
+          sessionTally.set(key, {
+            sessionId: hit.turn.sessionId,
+            cwd: hit.turn.cwd,
+            hits: 1,
+          });
+        } else {
+          seen.hits++;
         }
+      } else if (opts.summary === "count") {
+        // Counted by `count` above; nothing to render per hit.
       } else if (opts.json) {
         await writeStdout(formatHitJson(hit, opts, home) + "\n");
       } else if (dumping) {
@@ -128,7 +137,7 @@ async function main(): Promise<number> {
         await writeStdout(formatHit(hit, opts, home, color) + "\n\n");
       }
 
-      if (opts.printResume && opts.summary === undefined) {
+      if (opts.printResume) {
         const cmd = resumeCommand(hit);
         // Every turn of a dump carries the same id, so print it once per session.
         if (cmd !== undefined && !(dumping && !newSession)) {
@@ -142,6 +151,15 @@ async function main(): Promise<number> {
       `cc-grep: ${err instanceof Error ? err.message : String(err)}\n`,
     );
     return 2;
+  }
+
+  // Without this, "N hits" and "stopped at N" are indistinguishable — and a
+  // truncated --session dump reads as the whole conversation.
+  if (opts.maxCount !== undefined && count >= opts.maxCount) {
+    process.stderr.write(
+      `cc-grep: stopped at ${String(opts.maxCount)} (--max-count); ` +
+        `more may match\n`,
+    );
   }
 
   if (dumping && dumpedSessions.size > 1) {
@@ -176,20 +194,19 @@ async function main(): Promise<number> {
       (opts.json ? JSON.stringify({ hits: count }) : String(count)) + "\n",
     );
   } else if (opts.summary === "sessions") {
-    for (const { turn, hits } of sessionTally.values()) {
+    // Ranked, not discovery order: the point of a survey is which sessions to
+    // read first.
+    const ranked = [...sessionTally.values()].sort((a, b) => b.hits - a.hits);
+    for (const { sessionId, cwd, hits } of ranked) {
       await writeStdout(
         (opts.json
-          ? JSON.stringify({
-              sessionId: turn.sessionId ?? null,
-              hits,
-              cwd: turn.cwd ?? null,
-            })
-          : formatSessionLine(turn, hits, home, color)) + "\n",
+          ? JSON.stringify({ sessionId, hits, cwd })
+          : formatSessionLine(sessionId, cwd, hits, home, color)) + "\n",
       );
     }
   }
 
-  if (!opts.json && opts.summary === undefined) {
+  if (!opts.json) {
     if (opts.resume && firstHit !== undefined) {
       const cmd = resumeCommand(firstHit);
       if (cmd !== undefined) await writeStdout(`\n${cmd}\n`);

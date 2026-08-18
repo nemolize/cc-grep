@@ -152,6 +152,25 @@ test("--count and --list-sessions cannot be combined", () => {
   });
 });
 
+test.each([
+  ["--resume", "--count"],
+  ["--print-resume", "--count"],
+  ["--resume", "--list-sessions"],
+  ["--print-resume", "--list-sessions"],
+])("%s cannot combine with %s", (resume, summary) => {
+  const r = parse(["p", summary, resume]);
+  expect(r.kind).toBe("error");
+  if (r.kind === "error") {
+    expect(r.message).toContain(resume);
+    expect(r.message).toContain(summary);
+  }
+});
+
+test("--resume still works without a summary flag", () => {
+  expect(parse(["p", "--resume"]).kind).toBe("options");
+  expect(parse(["p", "--print-resume"]).kind).toBe("options");
+});
+
 test("help documents the survey flags and the output-volume warning", () => {
   expect(HELP).toContain("--max-count");
   expect(HELP).toContain("--count");

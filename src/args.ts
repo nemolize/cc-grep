@@ -47,10 +47,11 @@ Filters:
 
 Context & output:
   -C, --context <N>    Lines of context around each match (default: 2)
-  -m, --max-count <N>  Stop after N hits
+  -m, --max-count <N>  Stop after N hits (notes on stderr that it capped)
   -c, --count          Print the number of hits instead of the hits
-  -l, --list-sessions  Print one line per matching session instead of the hits
-  --json               Emit one JSON object per hit (pipeline-friendly)
+  -l, --list-sessions  Print one line per matching session, most hits first
+  --json               Emit one JSON object per hit — or per session with -l,
+                       or a single {"hits":N} with -c (pipeline-friendly)
   --color <always|never|auto>   Colorize output (default: auto)
   --resume             Print \`claude --resume <id>\` for the top hit
   --print-resume       Print the resume command for every hit
@@ -289,6 +290,17 @@ export function parseArgs(
       : values["list-sessions"] === true
         ? "sessions"
         : undefined;
+
+  if (summary !== undefined) {
+    const summaryFlag = values.count === true ? "--count" : "--list-sessions";
+    for (const resumeFlag of ["resume", "print-resume"] as const) {
+      if (values[resumeFlag] === true) {
+        return err(
+          `--${resumeFlag} and ${summaryFlag} cannot be combined — a summary prints no hit to resume`,
+        );
+      }
+    }
+  }
 
   const colorValue = values.color;
   if (
