@@ -13,4 +13,6 @@ cannot separate from a real edit.
 
 Either flag stands in for the pattern, and a patternless run prints the header
 alone, naming the tool and the path it targeted. `--json` gains a `toolCalls`
-array on any hit that made one.
+array on any hit that made one, and returns `matchedLines` empty on a
+patternless search for the same reason the header stands alone — every line
+"matched", so listing them says nothing. A `--session` dump is unaffected.
