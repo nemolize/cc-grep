@@ -145,6 +145,7 @@ export function formatHit(
 
   const show = new Set<number>();
   const tools: string[] = [];
+  const hoisted = new Set<number>();
   for (const idx of hit.matchedLineIndices) {
     for (let i = idx - opts.context; i <= idx + opts.context; i++) {
       if (i >= 0 && i < turn.textLines.length) show.add(i);
@@ -152,6 +153,7 @@ export function formatHit(
     const at = toolHeaderIndex(turn.textLines, idx);
     if (at === undefined) continue;
     show.add(at);
+    hoisted.add(at);
     const name = decorations[at]?.toolName;
     if (name !== undefined && name !== "" && !tools.includes(name)) {
       tools.push(name);
@@ -176,10 +178,9 @@ export function formatHit(
   for (const i of ordered) {
     const raw = turn.textLines[i] ?? "";
     const dec = decorations[i];
-    // A header whose name never reached the hit header belongs to a neighbouring
-    // block; printing it inline keeps the attribution the old renderer carried.
-    const orphanHeader =
-      dec?.toolName !== undefined && !tools.includes(dec.toolName);
+    // Keyed by index, not name: a neighbouring block of the same tool needs its
+    // own header, or its `-`/`+` lines read as part of the matched call's diff.
+    const orphanHeader = dec?.toolName !== undefined && !hoisted.has(i);
     // A suppressed line that matched still prints — hiding it would drop the
     // very hit the user searched for.
     if (dec?.suppressed === true && !matched.has(i) && !orphanHeader) continue;

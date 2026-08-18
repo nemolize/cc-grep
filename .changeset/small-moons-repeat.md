@@ -10,5 +10,6 @@ display-only, so `old_string:` still finds an edit.
 
 Telling an argument from a line of file content that looks like one is a
 heuristic, since extraction keeps a value's newlines but not the record of where
-they were. It is deliberately conservative — content is never hidden by a wrong
-guess, only a diff marker can extend one line too far.
+they were. It is deliberately conservative: a wrong guess never hides a line, and
+a line that matched always prints — it can only carry a `-`/`+` marker onto lines
+that are not part of that value.

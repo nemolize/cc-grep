@@ -7,7 +7,7 @@ import { TOOL_MARK } from "./textExtract.js";
 export interface LineDecoration {
   /** Replaces the line's text. Undefined leaves it as extracted. */
   text?: string | undefined;
-  /** Hidden from the rendered body unless the line itself matched. */
+  /** Carries nothing a reader needs; each caller decides whether to hide it. */
   suppressed?: boolean | undefined;
   /** Set on the `⚙ <name>` header only, so a caller can lift the name away. */
   toolName?: string | undefined;
@@ -18,8 +18,11 @@ export interface LineDecoration {
  * object literal so a name like `constructor` cannot reach a prototype member.
  */
 interface ToolProfile {
-  /** Fields whose value is noise to a reader of this tool's call. */
-  suppressed: ReadonlySet<string>;
+  /**
+   * Fields whose value is noise, each with the values it may hold. A line only
+   * matches when its value does too — a content line reusing the name does not.
+   */
+  suppressed: ReadonlyMap<string, ReadonlySet<string>>;
   /** Fields shown as a diff side rather than a `key: value` pair. */
   diffMarkers: ReadonlyMap<string, string>;
   /**
@@ -29,20 +32,28 @@ interface ToolProfile {
   fields: ReadonlySet<string>;
 }
 
-function editProfile(): ToolProfile {
-  return {
-    suppressed: new Set(["replace_all"]),
-    diffMarkers: new Map([
-      ["old_string", "-"],
-      ["new_string", "+"],
-    ]),
-    fields: new Set(["file_path", "old_string", "new_string", "replace_all"]),
-  };
-}
+const EDIT_PROFILE: ToolProfile = {
+  suppressed: new Map([["replace_all", new Set(["true", "false"])]]),
+  diffMarkers: new Map([
+    ["old_string", "-"],
+    ["new_string", "+"],
+  ]),
+  fields: new Set(["file_path", "old_string", "new_string", "replace_all"]),
+};
+
+/**
+ * MultiEdit nests its strings inside an `edits` array, so none of Edit's fields
+ * appear at the top level; sharing Edit's profile only ever matched content.
+ */
+const MULTI_EDIT_PROFILE: ToolProfile = {
+  suppressed: new Map(),
+  diffMarkers: new Map(),
+  fields: new Set(["file_path", "edits"]),
+};
 
 const TOOL_PROFILES: ReadonlyMap<string, ToolProfile> = new Map([
-  ["Edit", editProfile()],
-  ["MultiEdit", editProfile()],
+  ["Edit", EDIT_PROFILE],
+  ["MultiEdit", MULTI_EDIT_PROFILE],
 ]);
 
 /** `key: rest` split on the first colon-space, or undefined for a body line. */
@@ -62,10 +73,10 @@ function splitField(line: string): { key: string; rest: string } | undefined {
 
 /**
  * A tool block runs from a `⚙ <name>` header to the first blank line, the same
- * scope `formatHit` uses. Extraction dropped where each value's newlines were,
- * so a field is recognised heuristically — a declared key, unseen in this block;
- * tightening it further needs those boundaries from `textExtract`, not a sharper
- * guess here.
+ * scope `formatHit` uses. Extraction dropped where each value's newlines were —
+ * and emits no separator between content blocks — so both a field and the block's
+ * end are recognised heuristically. Tightening either needs those boundaries out
+ * of `textExtract`, which is the change to make before adding another flag here.
  */
 export function decorateToolLines(
   lines: readonly string[],
@@ -130,7 +141,8 @@ export function decorateToolLines(
     // Never once a value has started: hiding a line of content is the one
     // failure this layer must not have, so it only suppresses where it is sure.
     marker = undefined;
-    suppressing = !started && profile.suppressed.has(field.key);
+    suppressing =
+      !started && profile.suppressed.get(field.key)?.has(field.rest) === true;
     out[i] = suppressing ? { suppressed: true } : undefined;
   }
 

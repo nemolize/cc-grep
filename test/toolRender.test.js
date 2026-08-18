@@ -110,6 +110,21 @@ test("an unknown key inside a value continues it instead of ending it", () => {
 
 // `replace_all` is optional, so content holding that line can be its FIRST
 // occurrence — suppressing it would delete a line of the edited file.
+// MultiEdit nests its strings in an `edits` array, so Edit's field names only
+// ever appear inside content — sharing its profile hid the lines below them.
+test("MultiEdit content is not read as Edit's arguments", () => {
+  const dec = decorateToolLines([
+    "⚙ MultiEdit",
+    "file_path: /x",
+    "edits: [{old_string: keepme",
+    "replace_all: false",
+    "visible tail, new_string: newval}]",
+  ]);
+  expect(dec[3]?.suppressed).toBe(undefined);
+  expect(dec[4]?.suppressed).toBe(undefined);
+  expect(dec[4]?.text).toBe(undefined);
+});
+
 test("content is never suppressed once a value has started", () => {
   const dec = decorateToolLines([
     "⚙ Edit",

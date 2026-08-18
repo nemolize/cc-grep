@@ -444,6 +444,28 @@ test("a header pulled in only as context stays inline, keeping attribution", () 
   expect(out).toContain("  │ [Bash]");
 });
 
+// Keyed by name, a neighbouring block of the same tool lost its header and its
+// diff lines read as part of the matched call's.
+test("a neighbouring block of the same tool keeps its own header", () => {
+  const h = hit();
+  h.turn.textLines = [
+    "⚙ Edit",
+    "old_string: aaa",
+    "⚙ Edit",
+    "old_string: MATCHME",
+  ];
+  h.matchedLineIndices = [3];
+  const out = formatHit(
+    h,
+    { ...opts, context: 4, pattern: "MATCHME" },
+    "/home/u",
+    false,
+  );
+  const body = out.split("\n").slice(1);
+  expect(body.filter((l) => l.includes("[Edit]"))).toHaveLength(1);
+  expect(body[0]).toBe("  │ [Edit]");
+});
+
 test("prose does not borrow an earlier call's tool header", () => {
   const h = hit();
   h.turn.textLines = ["⚙ Bash", "command: ls", "", "prose match", "tail"];

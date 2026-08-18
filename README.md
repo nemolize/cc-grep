@@ -274,8 +274,10 @@ won't match, and `command:` matches every Bash call.
 Because extraction keeps a value's newlines but not the record of where they
 were, the display layer tells an argument from a line of file content that looks
 like one (`port: 80`) heuristically — a known argument name, not yet seen in that
-call. Content is never hidden by a wrong guess, but a diff marker can extend one
-line too far.
+call, and for a hidden argument its expected value too. A wrong guess never
+hides a line, and a line that matched always prints; what it can do is carry a
+`-`/`+` marker onto lines that are not part of that value — a run of content, or
+text following the call in the same message.
 
 The scan is a plain linear read — fast enough (sub-second for a
 low-thousands-of-sessions corpus) that no index is needed.
