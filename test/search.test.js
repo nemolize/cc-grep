@@ -273,3 +273,59 @@ test("--file alone still separates a tool call from a prose mention", async () =
     ]);
   });
 });
+
+async function twoFileCorpus(fn) {
+  const dir = await mkdtemp(join(tmpdir(), "cc-grep-maxcount-"));
+  const turn = (sessionId) =>
+    JSON.stringify({
+      type: "user",
+      sessionId,
+      timestamp: "2026-07-13T00:00:00Z",
+      message: { content: "a needle here" },
+    });
+  // Two hits per file across two files: a counter that resets per file, or one
+  // checked only between files, would still pass a single-file corpus.
+  await writeFile(join(dir, "a.jsonl"), [turn("a1"), turn("a2")].join("\n"));
+  await writeFile(join(dir, "b.jsonl"), [turn("b1"), turn("b2")].join("\n"));
+  try {
+    await fn(dir);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
+test("maxCount caps the hits yielded", async () => {
+  await twoFileCorpus(async (root) => {
+    expect((await collect(opts(root, { maxCount: 1 }))).length).toBe(1);
+    expect((await collect(opts(root, { maxCount: 3 }))).length).toBe(3);
+  });
+});
+
+test("maxCount counts across files, not per file", async () => {
+  await twoFileCorpus(async (root) => {
+    const hits = await collect(opts(root, { maxCount: 2 }));
+    expect(hits.map((h) => h.turn.sessionId)).toEqual(["a1", "a2"]);
+  });
+});
+
+test("maxCount above the hit total yields every hit", async () => {
+  await twoFileCorpus(async (root) => {
+    expect((await collect(opts(root, { maxCount: 99 }))).length).toBe(4);
+  });
+});
+
+test("maxCount undefined leaves the search uncapped", async () => {
+  await twoFileCorpus(async (root) => {
+    expect((await collect(opts(root, {}))).length).toBe(4);
+  });
+});
+
+test("maxCount stops reading rather than filtering after the fact", async () => {
+  await twoFileCorpus(async (root) => {
+    // The generator must not resume past the cap: pulling one hit under
+    // maxCount:1 has to leave it done, not merely stop yielding.
+    const it = search(opts(root, { maxCount: 1 }));
+    expect((await it.next()).done).toBe(false);
+    expect((await it.next()).done).toBe(true);
+  });
+});

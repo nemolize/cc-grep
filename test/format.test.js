@@ -5,6 +5,7 @@ import {
   formatDumpTurn,
   formatHit,
   formatHitJson,
+  formatSessionLine,
   formatTimestamp,
   resumeCommand,
   shortenPath,
@@ -361,4 +362,24 @@ test("prose does not borrow an earlier call's tool header", () => {
     false,
   );
   expect(out).not.toMatch(/⚙ Bash/);
+});
+
+test("formatSessionLine prints the full id so it pastes into --session", () => {
+  const t = hit().turn;
+  const out = formatSessionLine(t.sessionId, t.cwd, 3, "/home/u", false);
+  expect(out).toContain(t.sessionId);
+  expect(out).toContain("~/proj");
+  expect(out).toContain("3 hits");
+});
+
+test("formatSessionLine singularises a lone hit", () => {
+  const t = hit().turn;
+  expect(formatSessionLine(t.sessionId, t.cwd, 1, "/home/u", false)).toContain(
+    "1 hit ",
+  );
+});
+
+test("formatSessionLine tolerates a missing session id and cwd", () => {
+  const out = formatSessionLine(undefined, undefined, 2, "/home/u", false);
+  expect(out).toContain("?");
 });

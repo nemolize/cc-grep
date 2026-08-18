@@ -67,6 +67,37 @@ $ npx @nemolize/cc-grep "auth flow"
 - `--include-meta` — include `isMeta` (skill/system-injected) turns, off by
   default.
 
+### Surveying a broad pattern
+
+A pattern that matches thousands of turns prints megabytes, which is the wrong
+first move — especially when the output is going into an agent's context window.
+Survey first, then narrow:
+
+- `-c, --count` — print how many hits there are, and nothing else.
+- `-l, --list-sessions` — print one line per matching session (full id, hit
+  count, cwd), most hits first. The id is printed in full, so the line pastes
+  into `--session`.
+- `-m, --max-count <N>` — stop after N hits, and note on stderr that it capped.
+  Piping through `head` also ends the scan (the EPIPE guard sees the closed
+  pipe), so this is not about speed: `-m` stops at exactly hit N rather than at
+  whatever the pipe buffer held, never cuts a hit mid-block, keeps the exit
+  status meaningful, and composes with `-c`.
+
+```
+$ cc-grep "denyRead" -c
+223
+
+$ cc-grep "denyRead" -l
+3bdb74bf-2a64-400b-94cb-b76a9f0620df    30 hits  ~/dotfiles
+74b82329-00d8-4530-bb8b-c08d85d38c05    25 hits  ~/dotfiles
+…
+```
+
+`--json` pairs with both: `-c` emits a single `{"hits":223}`, `-l` emits one
+`{"sessionId":…,"hits":…,"cwd":…}` per session. Neither composes with
+`--resume` / `--print-resume` — a summary prints no hit to resume, so the
+combination is a usage error rather than a silently dropped flag.
+
 ### Context & output
 
 - `-C, --context <N>` — lines of context around each match (default: 2).
@@ -172,6 +203,10 @@ header stands alone — every line "matched", so listing them says nothing.
 ## Recipes
 
 ```sh
+# Is X worth searching for at all, and where does it live?
+cc-grep "X" -c
+cc-grep "X" -l
+
 # What did I ask about X in the last month?
 cc-grep "X" --role user --since 30d --subagents exclude
 

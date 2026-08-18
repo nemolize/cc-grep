@@ -10,6 +10,7 @@ import {
   formatDumpTurn,
   formatHit,
   formatHitJson,
+  formatSessionLine,
   resumeCommand,
   shouldColor,
 } from "./format.js";
@@ -90,6 +91,12 @@ async function main(): Promise<number> {
   const resumeLines: string[] = [];
   const dumping = opts.session !== undefined;
   const dumpedSessions = new Set<string>();
+  // Keyed by file for a turn with no session id: those rows are unrelated to
+  // each other, and a shared "?" key would merge them into one fake session.
+  const sessionTally = new Map<
+    string,
+    { sessionId?: string | undefined; cwd?: string | undefined; hits: number }
+  >();
 
   try {
     for await (const hit of search(opts)) {
@@ -102,7 +109,21 @@ async function main(): Promise<number> {
         dumping && !dumpedSessions.has(hit.turn.sessionId ?? "?");
       if (newSession) dumpedSessions.add(hit.turn.sessionId ?? "?");
 
-      if (opts.json) {
+      if (opts.summary === "sessions") {
+        const key = hit.turn.sessionId ?? `\0${hit.turn.file}`;
+        const seen = sessionTally.get(key);
+        if (seen === undefined) {
+          sessionTally.set(key, {
+            sessionId: hit.turn.sessionId,
+            cwd: hit.turn.cwd,
+            hits: 1,
+          });
+        } else {
+          seen.hits++;
+        }
+      } else if (opts.summary === "count") {
+        // Counted by `count` above; nothing to render per hit.
+      } else if (opts.json) {
         await writeStdout(formatHitJson(hit, opts, home) + "\n");
       } else if (dumping) {
         if (newSession) {
@@ -132,6 +153,15 @@ async function main(): Promise<number> {
     return 2;
   }
 
+  // Without this, "N hits" and "stopped at N" are indistinguishable — and a
+  // truncated --session dump reads as the whole conversation.
+  if (opts.maxCount !== undefined && count >= opts.maxCount) {
+    process.stderr.write(
+      `cc-grep: stopped at ${String(opts.maxCount)} (--max-count); ` +
+        `more may match\n`,
+    );
+  }
+
   if (dumping && dumpedSessions.size > 1) {
     process.stderr.write(
       `cc-grep: "${opts.session ?? ""}" matched ${String(dumpedSessions.size)} sessions — ` +
@@ -157,6 +187,23 @@ async function main(): Promise<number> {
           ? "check the id, or loosen the pattern/filters\n"
           : "check the id, or try --subagents=include\n"),
     );
+  }
+
+  if (opts.summary === "count") {
+    await writeStdout(
+      (opts.json ? JSON.stringify({ hits: count }) : String(count)) + "\n",
+    );
+  } else if (opts.summary === "sessions") {
+    // Ranked, not discovery order: the point of a survey is which sessions to
+    // read first.
+    const ranked = [...sessionTally.values()].sort((a, b) => b.hits - a.hits);
+    for (const { sessionId, cwd, hits } of ranked) {
+      await writeStdout(
+        (opts.json
+          ? JSON.stringify({ sessionId, hits, cwd })
+          : formatSessionLine(sessionId, cwd, hits, home, color)) + "\n",
+      );
+    }
   }
 
   if (!opts.json) {

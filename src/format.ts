@@ -163,6 +163,25 @@ export function formatHit(
 }
 
 /**
+ * One `-l` line per matching session. The full id is printed, not the 8-char
+ * form headers use, so the line pastes straight into `--session`.
+ */
+export function formatSessionLine(
+  sessionId: string | undefined,
+  cwd: string | undefined,
+  hits: number,
+  home: string,
+  color: boolean,
+): string {
+  const id = sessionId === undefined || sessionId === "" ? "?" : sessionId;
+  const unit = hits === 1 ? "hit " : "hits";
+  return (
+    cyan(id, color) +
+    `  ${String(hits).padStart(4)} ${unit}  ${shortenPath(cwd, home)}`
+  );
+}
+
+/**
  * Banner printed once above a `--session` dump, carrying the per-session
  * metadata that `formatHit` repeats on every hit.
  */

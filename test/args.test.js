@@ -62,6 +62,8 @@ test.each([
   "--resume",
   "--print-resume",
   "--json",
+  "--count",
+  "--list-sessions",
 ])("%s rejects an inline value", (flag) => {
   const result = parse(["p", `${flag}=false`]);
   expect(result.kind).toBe("error");
@@ -111,6 +113,70 @@ test("--context must be an integer in [0, 10000]", () => {
   expect(parse(["p", "--context", "10001"]).kind).toBe("error");
   expect(parse(["p", "-C", "0"]).kind).toBe("options");
   expect(parse(["p", "-C", "10000"]).kind).toBe("options");
+});
+
+test("--max-count must be an integer >= 1", () => {
+  expect(parse(["p", "--max-count="])).toEqual({
+    kind: "error",
+    message: '--max-count must be an integer >= 1 (got "")',
+  });
+  expect(parse(["p", "--max-count=0"])).toEqual({
+    kind: "error",
+    message: '--max-count must be an integer >= 1 (got "0")',
+  });
+  expect(parse(["p", "--max-count=1.5"]).kind).toBe("error");
+  expect(parse(["p", "--max-count", "x"]).kind).toBe("error");
+  const r = parse(["p", "-m", "20"]);
+  expect(r.kind).toBe("options");
+  if (r.kind === "options") expect(r.options.maxCount).toBe(20);
+});
+
+test("maxCount is undefined when unset", () => {
+  const r = parse(["p"]);
+  if (r.kind === "options") expect(r.options.maxCount).toBeUndefined();
+});
+
+test("--count and --list-sessions map to a summary mode", () => {
+  const c = parse(["p", "-c"]);
+  if (c.kind === "options") expect(c.options.summary).toBe("count");
+  const l = parse(["p", "-l"]);
+  if (l.kind === "options") expect(l.options.summary).toBe("sessions");
+  const none = parse(["p"]);
+  if (none.kind === "options") expect(none.options.summary).toBeUndefined();
+});
+
+test("--count and --list-sessions cannot be combined", () => {
+  expect(parse(["p", "-c", "-l"])).toEqual({
+    kind: "error",
+    message: "--count and --list-sessions cannot be combined",
+  });
+});
+
+test.each([
+  ["--resume", "--count"],
+  ["--print-resume", "--count"],
+  ["--resume", "--list-sessions"],
+  ["--print-resume", "--list-sessions"],
+])("%s cannot combine with %s", (resume, summary) => {
+  const r = parse(["p", summary, resume]);
+  expect(r.kind).toBe("error");
+  if (r.kind === "error") {
+    expect(r.message).toContain(resume);
+    expect(r.message).toContain(summary);
+  }
+});
+
+test("--resume still works without a summary flag", () => {
+  expect(parse(["p", "--resume"]).kind).toBe("options");
+  expect(parse(["p", "--print-resume"]).kind).toBe("options");
+});
+
+test("help documents the survey flags and the output-volume warning", () => {
+  expect(HELP).toContain("--max-count");
+  expect(HELP).toContain("--count");
+  expect(HELP).toContain("--list-sessions");
+  expect(HELP).toContain("Examples:");
+  expect(HELP).toContain("print megabytes");
 });
 
 test("--color validation", () => {
