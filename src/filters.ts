@@ -46,7 +46,7 @@ export function passesFilters(turn: Turn, opts: Options): boolean {
 
 /**
  * Both conditions must hold on the *same* call: `--tool Edit --file x` asks
- * which session edited x, not one that read x and edited something else.
+ * which session targeted x, not one that read x and edited something else.
  */
 export function matchesToolCall(call: ToolCall, opts: Options): boolean {
   if (
