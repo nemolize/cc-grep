@@ -148,6 +148,8 @@ async function main(): Promise<number> {
       opts.untilMs !== undefined ||
       opts.cwd !== undefined ||
       opts.branch !== undefined ||
+      opts.tools !== undefined ||
+      opts.file !== undefined ||
       opts.subagents !== undefined;
     process.stderr.write(
       `cc-grep: no turns for session "${opts.session ?? ""}" — ` +

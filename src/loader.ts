@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { createInterface } from "node:readline";
 
 import { isRecord } from "./guards.js";
-import { extractTextLines } from "./textExtract.js";
+import { extractContent } from "./textExtract.js";
 import type { Turn } from "./types.js";
 
 // A single JSONL record over this many characters is either a pathological
@@ -79,7 +79,7 @@ function parseLine(
   if (role !== "user" && role !== "assistant") return undefined;
 
   const message = isRecord(obj["message"]) ? obj["message"] : undefined;
-  const textLines = extractTextLines(message?.["content"]);
+  const { textLines, toolCalls } = extractContent(message?.["content"]);
   if (textLines.length === 0) return undefined;
 
   const timestamp =
@@ -101,6 +101,7 @@ function parseLine(
     isSidechain: obj["isSidechain"] === true,
     agentId: typeof obj["agentId"] === "string" ? obj["agentId"] : undefined,
     textLines,
+    toolCalls,
   };
 }
 

@@ -48,6 +48,7 @@ function hit(over) {
       isMeta: false,
       isSidechain: false,
       textLines: ["line0", "match here", "line2"],
+      toolCalls: [],
       ...over,
     },
     matchedLineIndices: [1],
@@ -73,7 +74,83 @@ test("resumeCommand is undefined without a session id", () => {
   expect(resumeCommand(h)).toBe(undefined);
 });
 
+test("formatHitJson carries the turn's tool calls", () => {
+  const h = hit();
+  h.turn.toolCalls = [{ name: "Edit", paths: ["/a.ts"] }];
+  expect(JSON.parse(formatHitJson(h, "/home/u")).toolCalls).toEqual([
+    { name: "Edit", paths: ["/a.ts"] },
+  ]);
+});
+
+test("formatHitJson omits toolCalls when the turn called nothing", () => {
+  expect(JSON.parse(formatHitJson(hit(), "/home/u"))).not.toHaveProperty(
+    "toolCalls",
+  );
+});
+
 const opts = { context: 2, pattern: "x", regex: false, fixed: true };
+
+test("a --tool run names the tool and its path on the header", () => {
+  const h = hit();
+  h.turn.toolCalls = [{ name: "Edit", paths: ["/home/u/proj/src/a.ts"] }];
+  const header = formatHit(
+    h,
+    { ...opts, tools: ["Edit"] },
+    "/home/u",
+    false,
+  ).split("\n")[0];
+  expect(header).toContain("[Edit ~/proj/src/a.ts]");
+});
+
+test("the header names only the calls the filters selected", () => {
+  const h = hit();
+  h.turn.toolCalls = [
+    { name: "Read", paths: ["/home/u/proj/a.ts"] },
+    { name: "Edit", paths: ["/home/u/proj/b.ts"] },
+  ];
+  const header = formatHit(
+    h,
+    { ...opts, tools: ["Edit"] },
+    "/home/u",
+    false,
+  ).split("\n")[0];
+  expect(header).toContain("[Edit ~/proj/b.ts]");
+  expect(header).not.toContain("Read");
+});
+
+test("a pathless tool call still names the tool", () => {
+  const h = hit();
+  h.turn.toolCalls = [{ name: "Bash", paths: [] }];
+  const header = formatHit(
+    h,
+    { ...opts, tools: ["Bash"] },
+    "/home/u",
+    false,
+  ).split("\n")[0];
+  expect(header).toContain("[Bash]");
+});
+
+test("no tool summary without --tool / --file", () => {
+  const h = hit();
+  h.turn.toolCalls = [{ name: "Edit", paths: ["/a.ts"] }];
+  expect(formatHit(h, opts, "/home/u", false).split("\n")[0]).not.toContain(
+    "[Edit",
+  );
+});
+
+test("a patternless run prints the header alone, not every line", () => {
+  const h = hit();
+  h.turn.toolCalls = [{ name: "Edit", paths: ["/home/u/proj/a.ts"] }];
+  h.matchedLineIndices = [0, 1, 2];
+  const out = formatHit(
+    h,
+    { ...opts, pattern: undefined, tools: ["Edit"] },
+    "/home/u",
+    false,
+  );
+  expect(out.split("\n")).toHaveLength(1);
+  expect(out).toContain("[Edit ~/proj/a.ts]");
+});
 
 test("a tool header out of context range is pulled in", () => {
   const h = hit();

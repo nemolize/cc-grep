@@ -22,6 +22,7 @@ Read-only. Nothing ever leaves your machine.
 npx @nemolize/cc-grep <pattern> [options]
 cc-grep <pattern> [options]              # once installed globally
 cc-grep --session <id> [pattern]         # read one session as a conversation
+cc-grep --tool Edit --file <path>        # find which session changed a file
 ```
 
 ```
@@ -57,6 +58,12 @@ $ npx @nemolize/cc-grep "auth flow"
   duration (`7d`, `2h`, `30m`, `1w`) or an absolute date (`2026-06-01`).
 - `--cwd <substring>` — restrict to sessions whose working directory matches.
 - `--branch <substring>` — restrict by the git branch at session start.
+- `--tool <name[,name...]>` — restrict to turns that called one of these tools,
+  matched case-insensitively. Repeatable, so `--tool Edit --tool Write` and
+  `--tool Edit,Write` are the same request.
+- `--file <substring>` — restrict to turns whose tool call targets a matching
+  path (`file_path` / `notebook_path`). See
+  [Finding which session changed a file](#finding-which-session-changed-a-file).
 - `--include-meta` — include `isMeta` (skill/system-injected) turns, off by
   default.
 
@@ -133,6 +140,33 @@ includes them, a `--session` dump excludes them:
 `--json` names the relation rather than leaving it to be inferred from the file
 path: `isSubagent`, plus `agentId` and `parentSessionId` on a subagent hit.
 
+## Finding which session changed a file
+
+"Who last touched this file, and in what conversation" is the transcript
+analogue of `git log --follow`, and it is what an unexplained working-tree
+change raises. Grepping for the path answers a different question: a `Read`, a
+`Grep --path`, a `git diff -- <path>` and an actual `Edit` all match the same
+string, and in a prose-heavy repo the filename's own mentions drown the rest.
+
+`--tool` and `--file` filter on the tool calls themselves, so the edit is
+separable from the mention:
+
+```sh
+$ cc-grep --tool Edit,Write --file 'rules/documentation-staleness.md' --since 7d
+~/dotfiles  2026-08-07 23:01  84c616b9  assistant  [Edit ~/dotfiles/rules/documentation-staleness.md]
+```
+
+Both conditions hold on the _same_ call, so a session that read the file and
+edited a different one does not match. With no pattern the hit is the header
+alone — the tool and the path it targeted are the answer. Pass a pattern too
+and the matched lines come back as usual, still restricted to those turns.
+
+`--file` matches a substring of the path, so a repo-relative fragment finds an
+absolute path in the transcript. `--tool` is case-insensitive and repeatable.
+
+`--json` carries a `toolCalls` array (`{name, paths}`) on any hit that made one,
+so the attribution is machine-readable without re-parsing the rendered lines.
+
 ## Recipes
 
 ```sh
@@ -147,6 +181,9 @@ cc-grep "X" --resume
 
 # Only sessions from a specific project
 cc-grep "X" --cwd myrepo
+
+# Which session edited this file, and when?
+cc-grep --tool Edit,Write --file src/format.ts --since 7d
 
 # List the unique sessions that mention X
 cc-grep "X" --json | jq -r .sessionId | sort -u
