@@ -85,35 +85,38 @@ export function decorateToolLines(
     lines.length,
   ).fill(undefined);
 
-  let inBlock = false;
-  let profile: ToolProfile | undefined;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i] ?? "";
+    if (!line.startsWith(TOOL_MARK)) continue;
+    const name = line.slice(TOOL_MARK.length).trim();
+    out[i] = { text: `[${name}]`, toolName: name, suppressed: true };
+    i = decorateBlock(lines, i + 1, TOOL_PROFILES.get(name), out);
+  }
+
+  return out;
+}
+
+/**
+ * Decorate one block's argument lines and return the index of its last line.
+ * The scan state is local, so it cannot outlive the block it describes.
+ */
+function decorateBlock(
+  lines: readonly string[],
+  start: number,
+  profile: ToolProfile | undefined,
+  out: (LineDecoration | undefined)[],
+): number {
   let marker: string | undefined;
   let suppressing = false;
   let started = false;
-  let seen = new Set<string>();
+  const seen = new Set<string>();
 
-  for (const [i, line] of lines.entries()) {
-    // Inside a diff value a `⚙` is quoted data; elsewhere extraction gives no
-    // separator between calls, so only a live marker outranks the header read.
-    if (line.startsWith(TOOL_MARK) && marker === undefined) {
-      const name = line.slice(TOOL_MARK.length).trim();
-      inBlock = true;
-      profile = TOOL_PROFILES.get(name);
-      marker = undefined;
-      suppressing = false;
-      started = false;
-      seen = new Set();
-      out[i] = { text: `[${name}]`, toolName: name, suppressed: true };
-      continue;
-    }
-    if (!inBlock) continue;
-    if (line === "") {
-      inBlock = false;
-      profile = undefined;
-      marker = undefined;
-      suppressing = false;
-      continue;
-    }
+  for (let i = start; i < lines.length; i++) {
+    const line = lines[i] ?? "";
+    // A block ends at a blank line or the next call's header — but inside a
+    // diff value a `⚙` is quoted data, so a live marker outranks that read.
+    if (line === "") return i;
+    if (line.startsWith(TOOL_MARK) && marker === undefined) return i - 1;
 
     const field = splitField(line);
     // A field starts a new value only once per block: a tool passes each
@@ -151,5 +154,5 @@ export function decorateToolLines(
     out[i] = suppressing ? { suppressed: true } : undefined;
   }
 
-  return out;
+  return lines.length;
 }

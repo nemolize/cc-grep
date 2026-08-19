@@ -96,14 +96,22 @@ function toolHeaderIndex(lines: string[], idx: number): number | undefined {
  * The tool calls a `--tool` / `--file` run selected the turn for, so a hit
  * reads as "session S edited F at T" without a follow-up `--json | jq`.
  */
-function toolSummary(turn: Turn, opts: Options, home: string): string {
-  if (opts.tools === undefined && opts.file === undefined) return "";
+function toolSummary(
+  turn: Turn,
+  opts: Options,
+  home: string,
+): { text: string; named: ReadonlySet<string> } {
+  const named = new Set<string>();
+  if (opts.tools === undefined && opts.file === undefined) {
+    return { text: "", named };
+  }
 
   const file = opts.file;
   const parts: string[] = [];
   for (const call of turn.toolCalls) {
     if (!matchesToolCall(call, opts)) continue;
     const paths = file === undefined ? call.paths : matchingPaths(call, file);
+    named.add(call.name);
     parts.push(
       paths.length === 0
         ? `[${call.name}]`
@@ -112,7 +120,7 @@ function toolSummary(turn: Turn, opts: Options, home: string): string {
             .join(" "),
     );
   }
-  return parts.length === 0 ? "" : "  " + parts.join(" ");
+  return { text: parts.length === 0 ? "" : "  " + parts.join(" "), named };
 }
 
 /**
@@ -128,16 +136,16 @@ export function formatHit(
 ): string {
   const { turn } = hit;
   const summary = toolSummary(turn, opts, home);
+  const headerText = (suffix: string) =>
+    cyan(
+      `${shortenPath(turn.cwd, home)}  ${formatTimestamp(turn.timestampMs)}  ` +
+        `${sessionField(turn)}  ${turn.role}${summary.text}${suffix}`,
+      color,
+    );
 
   // Without a pattern every line "matched", so a body would dump whole Edits;
   // the header already carries what the filters selected the turn for.
-  if (opts.pattern === undefined) {
-    return cyan(
-      `${shortenPath(turn.cwd, home)}  ${formatTimestamp(turn.timestampMs)}  ` +
-        `${sessionField(turn)}  ${turn.role}${summary}`,
-      color,
-    );
-  }
+  if (opts.pattern === undefined) return headerText("");
 
   const matcher = buildMatcher(opts);
   const matched = new Set(hit.matchedLineIndices);
@@ -163,13 +171,8 @@ export function formatHit(
 
   // The filters name the calls they selected the turn for; these name the call
   // the body is showing. They differ whenever a turn made more than one.
-  const shown = tools.filter((name) => !summary.includes(`[${name}`));
-  const header = cyan(
-    `${shortenPath(turn.cwd, home)}  ${formatTimestamp(turn.timestampMs)}  ` +
-      `${sessionField(turn)}  ${turn.role}${summary}` +
-      (shown.length > 0 ? `  [${shown.join(", ")}]` : ""),
-    color,
-  );
+  const shown = tools.filter((name) => !summary.named.has(name));
+  const header = headerText(shown.length > 0 ? `  [${shown.join(", ")}]` : "");
 
   const body: string[] = [];
   for (const i of ordered) {

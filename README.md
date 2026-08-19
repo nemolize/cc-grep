@@ -274,15 +274,15 @@ won't match, and `command:` matches every Bash call.
 Because extraction keeps a value's newlines but not the record of where they
 were, the display layer tells an argument from a line of file content that looks
 like one (`port: 80`) heuristically — a known argument name, not yet seen in
-that call, and for a hidden argument its expected value and nothing but other
-arguments before it.
+that call. An argument is only _hidden_ on the stricter test of also holding
+that flag's own value and being the call's first line, since any earlier
+argument may itself have run over several lines.
 
 Every tie is broken towards showing the line: a wrong guess never hides one, and
 a line that matched always prints. What it can do is carry a `-`/`+` marker onto
 lines that are not part of that value. The same rule decides a `⚙` inside a diff
 value — transcripts do quote this tool's own output — so a second call opening
-there is read as content instead, which neither shape in the current corpus
-exercises.
+there is read as content instead, a shape that is rare in practice.
 
 The scan is a plain linear read — fast enough (sub-second for a
 low-thousands-of-sessions corpus) that no index is needed.
