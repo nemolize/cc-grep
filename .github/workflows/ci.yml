@@ -79,7 +79,7 @@ jobs:
 
       - if: ${{ !cancelled() && matrix.node-version == '24' && github.event_name == 'pull_request' && (steps.test.outcome == 'success' || steps.test.outcome == 'failure') }}
         name: Write the coverage report into the PR description
-        uses: nemolize/actions/upsert@0d3561c5db69eafa1311f4fad6c65d5984350006 # v1.3.0
+        uses: nemolize/actions/upsert@0a6e86438446cdc086f5dc490688523d8fb8282c # v1.4.0
         with:
           marker: coverage
           body: ${{ steps.table.outputs.markdown }}
