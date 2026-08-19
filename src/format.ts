@@ -1,6 +1,7 @@
 import { matchesToolCall, matchingPaths } from "./filters.js";
 import { buildMatcher } from "./matcher.js";
 import { TOOL_MARK } from "./textExtract.js";
+import { decorateToolLines } from "./toolRender.js";
 import type { ColorMode, Hit, Options, Turn } from "./types.js";
 
 const RESET = "\x1b[0m";
@@ -95,14 +96,22 @@ function toolHeaderIndex(lines: string[], idx: number): number | undefined {
  * The tool calls a `--tool` / `--file` run selected the turn for, so a hit
  * reads as "session S targeted F at T" without a follow-up `--json | jq`.
  */
-function toolSummary(turn: Turn, opts: Options, home: string): string {
-  if (opts.tools === undefined && opts.file === undefined) return "";
+function toolSummary(
+  turn: Turn,
+  opts: Options,
+  home: string,
+): { text: string; named: ReadonlySet<string> } {
+  const named = new Set<string>();
+  if (opts.tools === undefined && opts.file === undefined) {
+    return { text: "", named };
+  }
 
   const file = opts.file;
   const parts: string[] = [];
   for (const call of turn.toolCalls) {
     if (!matchesToolCall(call, opts)) continue;
     const paths = file === undefined ? call.paths : matchingPaths(call, file);
+    named.add(call.name);
     parts.push(
       paths.length === 0
         ? `[${call.name}]`
@@ -111,7 +120,7 @@ function toolSummary(turn: Turn, opts: Options, home: string): string {
             .join(" "),
     );
   }
-  return parts.length === 0 ? "" : "  " + parts.join(" ");
+  return { text: parts.length === 0 ? "" : "  " + parts.join(" "), named };
 }
 
 /**
@@ -126,38 +135,64 @@ export function formatHit(
   color: boolean,
 ): string {
   const { turn } = hit;
-  const header = cyan(
-    `${shortenPath(turn.cwd, home)}  ${formatTimestamp(turn.timestampMs)}  ` +
-      `${sessionField(turn)}  ${turn.role}${toolSummary(turn, opts, home)}`,
-    color,
-  );
+  const summary = toolSummary(turn, opts, home);
+  const headerText = (suffix: string) =>
+    cyan(
+      `${shortenPath(turn.cwd, home)}  ${formatTimestamp(turn.timestampMs)}  ` +
+        `${sessionField(turn)}  ${turn.role}${summary.text}${suffix}`,
+      color,
+    );
 
   // Without a pattern every line "matched", so a body would dump whole Edits;
   // the header already carries what the filters selected the turn for.
-  if (opts.pattern === undefined) return header;
+  if (opts.pattern === undefined) return headerText("");
 
   const matcher = buildMatcher(opts);
   const matched = new Set(hit.matchedLineIndices);
+  const decorations = decorateToolLines(turn.textLines);
 
   const show = new Set<number>();
+  const tools: string[] = [];
+  const hoisted = new Set<number>();
   for (const idx of hit.matchedLineIndices) {
     for (let i = idx - opts.context; i <= idx + opts.context; i++) {
       if (i >= 0 && i < turn.textLines.length) show.add(i);
     }
-    const header = toolHeaderIndex(turn.textLines, idx);
-    if (header !== undefined) show.add(header);
+    const at = toolHeaderIndex(turn.textLines, idx);
+    if (at === undefined) continue;
+    show.add(at);
+    hoisted.add(at);
+    const name = decorations[at]?.toolName;
+    if (name !== undefined && name !== "" && !tools.includes(name)) {
+      tools.push(name);
+    }
   }
   const ordered = [...show].sort((a, b) => a - b);
 
-  const body = ordered.map((i) => {
+  // The filters name the calls they selected the turn for; these name the call
+  // the body is showing. They differ whenever a turn made more than one.
+  const shown = tools.filter((name) => !summary.named.has(name));
+  const header = headerText(shown.length > 0 ? `  [${shown.join(", ")}]` : "");
+
+  const body: string[] = [];
+  for (const i of ordered) {
     const raw = turn.textLines[i] ?? "";
+    const dec = decorations[i];
+    // Keyed by index, not name: a neighbouring block of the same tool needs its
+    // own header, or its `-`/`+` lines read as part of the matched call's diff.
+    const orphanHeader = dec?.toolName !== undefined && !hoisted.has(i);
+    // A suppressed line that matched still prints — hiding it would drop the
+    // very hit the user searched for.
+    if (dec?.suppressed === true && !matched.has(i) && !orphanHeader) continue;
+    // Ranges are recomputed on the shown text: a decorated line is not the
+    // extracted one, so the raw line's offsets would highlight the wrong span.
+    const text = dec?.text ?? raw;
     if (matched.has(i)) {
-      const shown = highlight(raw, matcher.ranges(raw), color);
-      return `  │ >> ${shown}`;
+      body.push(`  │ >> ${highlight(text, matcher.ranges(text), color)}`);
+      continue;
     }
-    const dim = color ? DIM + raw + RESET : raw;
-    return `  │ ${dim}`;
-  });
+    body.push(`  │ ${color ? DIM + text + RESET : text}`);
+  }
 
   return [header, ...body].join("\n");
 }
@@ -221,13 +256,17 @@ export function formatDumpTurn(
   const matched = new Set(hit.matchedLineIndices);
   // With no pattern every line is "matched"; highlighting all of them is noise.
   const highlighting = opts.pattern !== undefined;
+  const decorations = decorateToolLines(turn.textLines);
 
-  // `>>` keeps the match visible under `--color never` and through a pipe.
-  const body = turn.textLines.map((raw, i) =>
-    highlighting && matched.has(i)
-      ? `  │ >> ${highlight(raw, matcher.ranges(raw), color)}`
-      : `  │ ${raw}`,
-  );
+  // The marker stays inline rather than moving to the header: one turn can hold
+  // several calls, and a hoisted list would not say which block each name owns.
+  const body = turn.textLines.map((raw, i) => {
+    const text = decorations[i]?.text ?? raw;
+    // `>>` keeps the match visible under `--color never` and through a pipe.
+    return highlighting && matched.has(i)
+      ? `  │ >> ${highlight(text, matcher.ranges(text), color)}`
+      : `  │ ${text}`;
+  });
 
   return [header, ...body].join("\n");
 }

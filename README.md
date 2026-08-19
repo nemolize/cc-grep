@@ -246,24 +246,48 @@ malformed JSON are skipped rather than crashing the scan, since the transcript
 schema is undocumented and drifts. Searchable text is pulled from message text,
 thinking blocks, tool inputs (e.g. the Bash command run), and tool results.
 
-A tool call is rendered as a `⚙ <tool name>` header followed by one
-`key: value` line per argument, with multi-line values keeping their real line
-breaks — so a hit inside a long heredoc shows its own neighbourhood rather than
-the whole argument:
+A tool call's arguments become one `key: value` line each, with multi-line
+values keeping their real line breaks — so a hit inside a long heredoc shows its
+own neighbourhood rather than the whole argument. The tool's name is tagged on
+the hit header:
 
 ```
-~/proj-a  2026-07-30 22:59  22c88264  assistant
-  │ ⚙ Bash
+~/proj-a  2026-07-30 22:59  22c88264  assistant  [Bash]
   │ >> command: gh pr create --draft --title "…"
   │ …following line of the heredoc…
 ```
 
-The `⚙` header is always shown for a matched tool call, even when the match
-lands deep enough in an argument that the header falls outside `-C N`.
+The name is tagged even when the match lands deep enough in an argument that the
+call's own header falls outside `-C N`.
 
-These rendered lines are also the lines matched against, so a pattern is tested
-per displayed line: one spanning two arguments won't match, and `command:`
-matches every Bash call.
+An `Edit` renders its two sides as a diff rather than as labelled fields, and
+arguments that carry no meaning for the reader (such as `replace_all`) are left
+out unless they are what matched:
+
+```
+~/proj-a  2026-08-07 23:01  84c616b9  assistant  [Edit]
+  │ file_path: .githooks/pre-commit
+  │ >> - "$(git rev-parse --show-toplevel)/.githooks/lib/run-gitleaks.sh"
+  │ + "$(git rev-parse --show-toplevel)/.githooks/lib/check-external-symlinks.sh"
+```
+
+This shaping is display-only: matching runs against the extracted `key: value`
+lines, so `old_string:` still finds an edit and `--json` emits those lines
+untouched. A pattern is tested per extracted line, so one spanning two arguments
+won't match, and `command:` matches every Bash call.
+
+Because extraction keeps a value's newlines but not the record of where they
+were, the display layer tells an argument from a line of file content that looks
+like one (`port: 80`) heuristically — a known argument name, not yet seen in
+that call. An argument is only _hidden_ on the stricter test of also holding
+that flag's own value and being the call's first line, since any earlier
+argument may itself have run over several lines.
+
+Every tie is broken towards showing the line: a wrong guess never hides one, and
+a line that matched always prints. What it can do is carry a `-`/`+` marker onto
+lines that are not part of that value. The same rule decides a `⚙` inside a diff
+value — transcripts do quote this tool's own output — so a second call opening
+there is read as content instead, a shape that is rare in practice.
 
 The scan is a plain linear read — fast enough (sub-second for a
 low-thousands-of-sessions corpus) that no index is needed.
