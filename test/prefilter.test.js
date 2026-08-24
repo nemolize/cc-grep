@@ -107,3 +107,21 @@ test("a pattern spanning an escape prefilters on its longest safe run", () => {
   expect(pf.test('{"text":"the \\"quoted\\" word"}')).toBe(true);
   expect(pf.test('{"text":"the word"}')).toBe(false);
 });
+
+// An HTML-escaping serialiser writes ">" as >, so a raw scan for ">"
+// misses a line the matcher matches. Real corpora carry this form.
+test("a line carrying a unicode escape is never rejected", () => {
+  const BS = String.fromCharCode(92);
+  const escaped = `{"text":"version ${BS}u003e=8.0.15 required"}`;
+  expect(JSON.parse(escaped).text).toBe("version >=8.0.15 required");
+
+  for (const over of [{}, { ignoreCase: true }]) {
+    const pf = buildPrefilter(opts({ pattern: ">=8.0.15", ...over }));
+    expect(pf.test(escaped)).toBe(true);
+  }
+});
+
+test("the unicode-escape fallback does not accept every line", () => {
+  const pf = buildPrefilter(opts({ pattern: "ratatui" }));
+  expect(pf.test('{"text":"no escapes and no match"}')).toBe(false);
+});

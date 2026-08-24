@@ -454,3 +454,22 @@ test("a pattern whose only safe run is short still hits", async () => {
     expect(hits.map((h) => h.turn.sessionId)).toEqual(["japanese"]);
   });
 });
+
+// An HTML-escaping serialiser writes ">" as >, so the raw line and the
+// decoded text differ on a character the prefilter would otherwise scan for.
+test("a hit survives when the JSONL \\u-escapes an ordinary character", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "cc-grep-uescape-"));
+  try {
+    const BS = String.fromCharCode(92);
+    const raw =
+      '{"type":"user","sessionId":"esc","timestamp":"2026-07-13T00:00:00Z",' +
+      `"message":{"content":"version ${BS}u003e=8.0.15 required"}}`;
+    expect(JSON.parse(raw).message.content).toBe("version >=8.0.15 required");
+    await writeFile(join(dir, "a.jsonl"), raw + "\n");
+
+    const hits = await collect(opts(dir, { pattern: ">=8.0.15" }));
+    expect(hits.map((h) => h.turn.sessionId)).toEqual(["esc"]);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
