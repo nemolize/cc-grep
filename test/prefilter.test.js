@@ -150,6 +150,21 @@ test("a pattern inside a rendered non-string token accepts every line", () => {
   }
 });
 
+// --ignore-case reaches the rendered `null` from `NULL`, so the guard has to
+// fold too or the literal slips through unscannable.
+test("the rendered-token guard folds case when the search does", () => {
+  for (const pattern of ["NULL", "Null", "TRUE"]) {
+    const pf = buildPrefilter(opts({ pattern, ignoreCase: true }));
+    expect(pf.test('{"input":{"count":1e400}}')).toBe(true);
+  }
+});
+
+test("that same pattern still prefilters when case matters", () => {
+  const pf = buildPrefilter(opts({ pattern: "NULL" }));
+  expect(pf.test('{"text":"NULL here"}')).toBe(true);
+  expect(pf.test('{"input":{"count":1e400}}')).toBe(false);
+});
+
 test("a word merely containing such a token still prefilters", () => {
   const pf = buildPrefilter(opts({ pattern: "nullify" }));
   expect(pf.test('{"text":"nullify it"}')).toBe(true);

@@ -507,6 +507,11 @@ test("a hit survives when an overflowing number renders as null", async () => {
 
     const hits = await collect(opts(dir, { pattern: "null" }));
     expect(hits.map((h) => h.turn.sessionId)).toEqual(["inf"]);
+
+    const folded = await collect(
+      opts(dir, { pattern: "NULL", ignoreCase: true }),
+    );
+    expect(folded.map((h) => h.turn.sessionId)).toEqual(["inf"]);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

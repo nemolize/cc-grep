@@ -78,9 +78,15 @@ const MIN_LITERAL_LENGTH = 3;
  * excludes, so a run can only land on a key or string inside one — and those do
  * appear in the raw line.
  */
-function couldSitInsideARenderedNonString(literal: string): boolean {
+function couldSitInsideARenderedNonString(
+  literal: string,
+  ignoreCase: boolean,
+): boolean {
   if (/^[0-9.eE+-]+$/.test(literal)) return true;
-  return ["null", "true", "false"].some((token) => token.includes(literal));
+  // Under --ignore-case the matcher reaches `null` from `NULL`, so comparing
+  // case-sensitively here would let that literal through unscannable.
+  const needle = ignoreCase ? literal.toLowerCase() : literal;
+  return ["null", "true", "false"].some((token) => token.includes(needle));
 }
 
 /**
@@ -101,7 +107,9 @@ export function buildPrefilter(opts: Options): Prefilter {
 
   const literal = longestRawSafeRun(pattern);
   if (literal.length < MIN_LITERAL_LENGTH) return ACCEPT_ALL;
-  if (couldSitInsideARenderedNonString(literal)) return ACCEPT_ALL;
+  if (couldSitInsideARenderedNonString(literal, opts.ignoreCase)) {
+    return ACCEPT_ALL;
+  }
 
   if (!opts.ignoreCase) {
     return {
