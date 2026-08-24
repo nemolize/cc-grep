@@ -378,3 +378,79 @@ test("maxCount stops reading rather than filtering after the fact", async () => 
     expect((await it.next()).done).toBe(true);
   });
 });
+
+/**
+ * One turn per pattern shape that the raw-line prefilter could wrongly reject:
+ * the text is escaped in the JSONL (`\"`, `\n`, `\uXXXX`) or reachable only
+ * through a separator `textExtract` synthesises, so a prefilter that tested the
+ * decoded form against raw bytes would drop these.
+ */
+async function escapedCorpus(fn) {
+  const dir = await mkdtemp(join(tmpdir(), "cc-grep-escaped-"));
+  const line = (sessionId, content) =>
+    JSON.stringify({
+      type: "user",
+      sessionId,
+      timestamp: "2026-07-13T00:00:00Z",
+      message: { content },
+    });
+  await writeFile(
+    join(dir, "s.jsonl"),
+    [
+      line("quoted", 'he said "needle" loudly'),
+      line("newline", "before\nneedle after"),
+      line("backslash", "path\\to\\needle"),
+      line("japanese", "これは needle です"),
+      line("slash", "src/needle.ts"),
+      JSON.stringify({
+        type: "assistant",
+        sessionId: "toolinput",
+        timestamp: "2026-07-13T00:00:00Z",
+        message: {
+          content: [
+            {
+              type: "tool_use",
+              name: "Edit",
+              input: { file_path: "/proj/needle.ts" },
+            },
+          ],
+        },
+      }),
+    ].join("\n"),
+  );
+  try {
+    await fn(dir);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
+test("the prefilter never drops a hit whose text is JSON-escaped", async () => {
+  await escapedCorpus(async (root) => {
+    const hits = await collect(opts(root, {}));
+    expect(hits.map((h) => h.turn.sessionId).sort()).toEqual([
+      "backslash",
+      "japanese",
+      "newline",
+      "quoted",
+      "slash",
+      "toolinput",
+    ]);
+  });
+});
+
+test("a pattern reachable only across a synthesised separator still hits", async () => {
+  await escapedCorpus(async (root) => {
+    const hits = await collect(opts(root, { pattern: "file_path: /proj" }));
+    expect(hits.map((h) => h.turn.sessionId)).toEqual(["toolinput"]);
+  });
+});
+
+test("a pattern whose only safe run is short still hits", async () => {
+  await escapedCorpus(async (root) => {
+    const hits = await collect(
+      opts(root, { pattern: "これは needle", ignoreCase: true }),
+    );
+    expect(hits.map((h) => h.turn.sessionId)).toEqual(["japanese"]);
+  });
+});

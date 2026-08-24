@@ -1,6 +1,7 @@
 import { passesFilters } from "./filters.js";
 import { findTranscripts, loadTurns } from "./loader.js";
 import { buildMatcher } from "./matcher.js";
+import { buildPrefilter } from "./prefilter.js";
 import type { Hit, Options } from "./types.js";
 
 /**
@@ -12,10 +13,11 @@ import type { Hit, Options } from "./types.js";
  */
 export async function* search(opts: Options): AsyncGenerator<Hit> {
   const matcher = buildMatcher(opts);
+  const prefilter = buildPrefilter(opts);
   let yielded = 0;
 
   for await (const file of findTranscripts(opts.root)) {
-    for await (const turn of loadTurns(file)) {
+    for await (const turn of loadTurns(file, prefilter)) {
       if (!passesFilters(turn, opts)) continue;
 
       const matchedLineIndices: number[] = [];

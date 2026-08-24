@@ -12,8 +12,13 @@ export interface Matcher {
 // than evaluate them — a transcript line over 1 MB is already pathological.
 const MAX_MATCH_LINE_BYTES = 1_000_000;
 
-function escapeRegex(s: string): string {
+export function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** True when `s` matches only itself, i.e. escaping it would be a no-op. */
+export function isRegexLiteral(s: string): boolean {
+  return escapeRegex(s) === s;
 }
 
 /**

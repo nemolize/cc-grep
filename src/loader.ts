@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { createInterface } from "node:readline";
 
 import { isRecord } from "./guards.js";
+import type { Prefilter } from "./prefilter.js";
 import { extractContent } from "./textExtract.js";
 import type { Turn } from "./types.js";
 
@@ -40,8 +41,15 @@ export async function* findTranscripts(root: string): AsyncGenerator<string> {
  * Parse one transcript file into normalized turns. Only `user`/`assistant`
  * lines carry searchable text; other line types (summary, queue-operation, …)
  * are skipped. Malformed JSON lines are skipped silently — never throw.
+ *
+ * `prefilter` may drop a raw line before it is parsed. Parsing dominates the
+ * scan, so this is what keeps a rare term from costing a full-corpus parse; it
+ * must be a superset of the caller's matcher or hits go missing.
  */
-export async function* loadTurns(file: string): AsyncGenerator<Turn> {
+export async function* loadTurns(
+  file: string,
+  prefilter?: Prefilter,
+): AsyncGenerator<Turn> {
   const stream = createReadStream(file, { encoding: "utf8" });
   const rl = createInterface({ input: stream, crlfDelay: Infinity });
   let lineIndex = -1;
@@ -49,6 +57,7 @@ export async function* loadTurns(file: string): AsyncGenerator<Turn> {
     for await (const line of rl) {
       lineIndex++;
       if (line.length === 0) continue;
+      if (prefilter !== undefined && !prefilter.test(line)) continue;
       const turn = parseLine(file, lineIndex, line);
       if (turn) yield turn;
     }
