@@ -492,3 +492,22 @@ test("a hit survives when JSON canonicalises the number that matched", async () 
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+// 1e400 overflows to Infinity, so the value reaches the matcher as "null" —
+// a token that appears nowhere in the raw line.
+test("a hit survives when an overflowing number renders as null", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "cc-grep-overflow-"));
+  try {
+    await writeFile(
+      join(dir, "a.jsonl"),
+      '{"type":"assistant","sessionId":"inf","timestamp":"2026-07-13T00:00:00Z",' +
+        '"message":{"content":[{"type":"tool_use","name":"T",' +
+        '"input":{"count":1e400}}]}}\n',
+    );
+
+    const hits = await collect(opts(dir, { pattern: "null" }));
+    expect(hits.map((h) => h.turn.sessionId)).toEqual(["inf"]);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

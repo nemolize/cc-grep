@@ -140,3 +140,18 @@ test("a literal containing a non-number character still prefilters", () => {
   expect(pf.test('{"text":"v100"}')).toBe(true);
   expect(pf.test('{"text":"unrelated"}')).toBe(false);
 });
+
+// 1e400 overflows to Infinity, so JSON.stringify renders "null" — a token the
+// raw line never carries and the numeric guard does not catch.
+test("a pattern inside a rendered non-string token accepts every line", () => {
+  for (const pattern of ["null", "ull", "true", "als"]) {
+    const pf = buildPrefilter(opts({ pattern }));
+    expect(pf.test('{"input":{"count":1e400}}')).toBe(true);
+  }
+});
+
+test("a word merely containing such a token still prefilters", () => {
+  const pf = buildPrefilter(opts({ pattern: "nullify" }));
+  expect(pf.test('{"text":"nullify it"}')).toBe(true);
+  expect(pf.test('{"text":"unrelated"}')).toBe(false);
+});
