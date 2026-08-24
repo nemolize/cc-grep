@@ -1,0 +1,7 @@
+---
+"@nemolize/cc-grep": patch
+---
+
+Skip `JSON.parse` on transcript lines that cannot contain the pattern. A search previously parsed every line of the corpus regardless of the pattern, so a term with a handful of hits cost the same full-corpus parse as one matching everywhere. Each raw line is now tested for a literal the pattern requires before it is parsed, cutting a 528 MB search from 2.19 s to 1.42 s (1.5×); the remaining time is dominated by reading the lines, not by parsing them.
+
+Results are unchanged. The prefilter is a strict superset of the matcher, and it stops prefiltering whenever the literal cannot be scanned for reliably: no pattern (`--session` dumps), a regex with metacharacters, a run under three characters, or a literal that could sit inside a value `JSON.parse` canonicalises — `1e2` reaches the matcher as `100`, and `1e400` overflows to `Infinity` and arrives as `null`. Characters JSON must escape and separators the text extractor synthesises are excluded from the literal, and any line carrying a `\uXXXX` escape is parsed regardless, since JSON may encode even an ordinary character that way (an HTML-escaping serialiser writes `>` as `>`). A property test derives what the matcher would see from each raw line and asserts the prefilter accepts whenever the matcher matches, so a future extractor change that mints a new divergence fails with a repro rather than silently losing hits.

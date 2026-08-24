@@ -378,3 +378,141 @@ test("maxCount stops reading rather than filtering after the fact", async () => 
     expect((await it.next()).done).toBe(true);
   });
 });
+
+/**
+ * One turn per pattern shape that the raw-line prefilter could wrongly reject:
+ * the text is escaped in the JSONL (`\"`, `\n`, `\uXXXX`) or reachable only
+ * through a separator `textExtract` synthesises, so a prefilter that tested the
+ * decoded form against raw bytes would drop these.
+ */
+async function escapedCorpus(fn) {
+  const dir = await mkdtemp(join(tmpdir(), "cc-grep-escaped-"));
+  const line = (sessionId, content) =>
+    JSON.stringify({
+      type: "user",
+      sessionId,
+      timestamp: "2026-07-13T00:00:00Z",
+      message: { content },
+    });
+  await writeFile(
+    join(dir, "s.jsonl"),
+    [
+      line("quoted", 'he said "needle" loudly'),
+      line("newline", "before\nneedle after"),
+      line("backslash", "path\\to\\needle"),
+      line("japanese", "これは needle です"),
+      line("slash", "src/needle.ts"),
+      JSON.stringify({
+        type: "assistant",
+        sessionId: "toolinput",
+        timestamp: "2026-07-13T00:00:00Z",
+        message: {
+          content: [
+            {
+              type: "tool_use",
+              name: "Edit",
+              input: { file_path: "/proj/needle.ts" },
+            },
+          ],
+        },
+      }),
+    ].join("\n"),
+  );
+  try {
+    await fn(dir);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
+test("the prefilter never drops a hit whose text is JSON-escaped", async () => {
+  await escapedCorpus(async (root) => {
+    const hits = await collect(opts(root, {}));
+    expect(hits.map((h) => h.turn.sessionId).sort()).toEqual([
+      "backslash",
+      "japanese",
+      "newline",
+      "quoted",
+      "slash",
+      "toolinput",
+    ]);
+  });
+});
+
+test("a pattern reachable only across a synthesised separator still hits", async () => {
+  await escapedCorpus(async (root) => {
+    const hits = await collect(opts(root, { pattern: "file_path: /proj" }));
+    expect(hits.map((h) => h.turn.sessionId)).toEqual(["toolinput"]);
+  });
+});
+
+test("a pattern whose only safe run is short still hits", async () => {
+  await escapedCorpus(async (root) => {
+    const hits = await collect(
+      opts(root, { pattern: "これは needle", ignoreCase: true }),
+    );
+    expect(hits.map((h) => h.turn.sessionId)).toEqual(["japanese"]);
+  });
+});
+
+// An HTML-escaping serialiser writes ">" as >, so the raw line and the
+// decoded text differ on a character the prefilter would otherwise scan for.
+test("a hit survives when the JSONL \\u-escapes an ordinary character", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "cc-grep-uescape-"));
+  try {
+    const BS = String.fromCharCode(92);
+    const raw =
+      '{"type":"user","sessionId":"esc","timestamp":"2026-07-13T00:00:00Z",' +
+      `"message":{"content":"version ${BS}u003e=8.0.15 required"}}`;
+    expect(JSON.parse(raw).message.content).toBe("version >=8.0.15 required");
+    await writeFile(join(dir, "a.jsonl"), raw + "\n");
+
+    const hits = await collect(opts(dir, { pattern: ">=8.0.15" }));
+    expect(hits.map((h) => h.turn.sessionId)).toEqual(["esc"]);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+// JSON.parse canonicalises 1e2 to 100, so the rendered digits appear nowhere in
+// the raw line and a raw scan for them cannot succeed.
+test("a hit survives when JSON canonicalises the number that matched", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "cc-grep-number-"));
+  try {
+    await writeFile(
+      join(dir, "a.jsonl"),
+      '{"type":"assistant","sessionId":"num","timestamp":"2026-07-13T00:00:00Z",' +
+        '"message":{"content":[{"type":"tool_use","name":"T",' +
+        '"input":{"count":1e2}}]}}\n',
+    );
+
+    const hits = await collect(opts(dir, { pattern: "100" }));
+    expect(hits.map((h) => h.turn.sessionId)).toEqual(["num"]);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+// 1e400 overflows to Infinity, so the value reaches the matcher as "null" —
+// a token that appears nowhere in the raw line.
+test("a hit survives when an overflowing number renders as null", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "cc-grep-overflow-"));
+  try {
+    await writeFile(
+      join(dir, "a.jsonl"),
+      '{"type":"assistant","sessionId":"inf","timestamp":"2026-07-13T00:00:00Z",' +
+        '"message":{"content":[{"type":"tool_use","name":"T",' +
+        '"input":{"count":1e400}}]}}\n',
+    );
+
+    const hits = await collect(opts(dir, { pattern: "null" }));
+    expect(hits.map((h) => h.turn.sessionId)).toEqual(["inf"]);
+
+    const folded = await collect(
+      opts(dir, { pattern: "NULL", ignoreCase: true }),
+    );
+    expect(folded.map((h) => h.turn.sessionId)).toEqual(["inf"]);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
