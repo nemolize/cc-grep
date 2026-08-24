@@ -473,3 +473,22 @@ test("a hit survives when the JSONL \\u-escapes an ordinary character", async ()
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+// JSON.parse canonicalises 1e2 to 100, so the rendered digits appear nowhere in
+// the raw line and a raw scan for them cannot succeed.
+test("a hit survives when JSON canonicalises the number that matched", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "cc-grep-number-"));
+  try {
+    await writeFile(
+      join(dir, "a.jsonl"),
+      '{"type":"assistant","sessionId":"num","timestamp":"2026-07-13T00:00:00Z",' +
+        '"message":{"content":[{"type":"tool_use","name":"T",' +
+        '"input":{"count":1e2}}]}}\n',
+    );
+
+    const hits = await collect(opts(dir, { pattern: "100" }));
+    expect(hits.map((h) => h.turn.sessionId)).toEqual(["num"]);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

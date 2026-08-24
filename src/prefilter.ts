@@ -37,8 +37,8 @@ function isRawSafe(ch: string): boolean {
 /**
  * A `\uXXXX` escape can encode any character, including one `isRawSafe` admits,
  * so such a line must be parsed rather than rejected — an HTML-escaping
- * serialiser writes `>` as `>`, which a raw scan for `>` would miss.
- * Measured at 0.6% of a 528 MB corpus, so the forced parse costs almost nothing.
+ * serialiser writes `>` as `>`, which a raw scan for `>` would miss. Such
+ * lines are rare enough in practice that the forced parse costs almost nothing.
  */
 function hasUnicodeEscape(rawLine: string): boolean {
   return rawLine.includes("\\u");
@@ -68,12 +68,22 @@ export function longestRawSafeRun(s: string): string {
 const MIN_LITERAL_LENGTH = 3;
 
 /**
+ * `JSON.parse` canonicalises numbers, so `textExtract` can render digits absent
+ * from the raw line — `1e2` becomes `100`, which a raw scan for `100` misses.
+ * Only an all-number-alphabet literal can sit wholly inside one rendered number,
+ * because any longer literal would have to span a separator `isRawSafe` excludes.
+ */
+function couldSitInsideARenderedNumber(literal: string): boolean {
+  return /^[0-9.eE+-]+$/.test(literal);
+}
+
+/**
  * Correctness depends on the returned filter being a superset of the matcher:
  * it must accept every line the matcher would accept, so it falls back to
- * accept-all whenever no literal is provably required — no pattern at all, a
- * regex whose matches are not pinned to one string, or a pattern with no usable
- * safe run — and the filters it does return admit any `\u`-escaping line
- * outright, since the literal cannot be scanned for reliably there.
+ * accept-all whenever the literal cannot be scanned for reliably — no pattern at
+ * all, a regex whose matches are not pinned to one string, a pattern with no
+ * usable safe run, or one that could sit inside a canonicalised number — and the
+ * filters it does return admit any `\u`-escaping line outright.
  */
 export function buildPrefilter(opts: Options): Prefilter {
   const pattern = opts.pattern;
@@ -84,6 +94,7 @@ export function buildPrefilter(opts: Options): Prefilter {
 
   const literal = longestRawSafeRun(pattern);
   if (literal.length < MIN_LITERAL_LENGTH) return ACCEPT_ALL;
+  if (couldSitInsideARenderedNumber(literal)) return ACCEPT_ALL;
 
   if (!opts.ignoreCase) {
     return {

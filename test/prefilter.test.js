@@ -125,3 +125,18 @@ test("the unicode-escape fallback does not accept every line", () => {
   const pf = buildPrefilter(opts({ pattern: "ratatui" }));
   expect(pf.test('{"text":"no escapes and no match"}')).toBe(false);
 });
+
+// JSON.parse canonicalises 1e2 to 100, so the digits the matcher sees were
+// never in the raw line and no raw scan can find them.
+test("a number-shaped pattern accepts every line", () => {
+  for (const pattern of ["100", "1500", "1e+21", "1.5", "-42"]) {
+    const pf = buildPrefilter(opts({ pattern }));
+    expect(pf.test('{"input":{"count":1e2}}')).toBe(true);
+  }
+});
+
+test("a literal containing a non-number character still prefilters", () => {
+  const pf = buildPrefilter(opts({ pattern: "v100" }));
+  expect(pf.test('{"text":"v100"}')).toBe(true);
+  expect(pf.test('{"text":"unrelated"}')).toBe(false);
+});

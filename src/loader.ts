@@ -42,9 +42,9 @@ export async function* findTranscripts(root: string): AsyncGenerator<string> {
  * lines carry searchable text; other line types (summary, queue-operation, …)
  * are skipped. Malformed JSON lines are skipped silently — never throw.
  *
- * `prefilter` may drop a raw line before it is parsed. Parsing dominates the
- * scan, so this is what keeps a rare term from costing a full-corpus parse; it
- * must be a superset of the caller's matcher or hits go missing.
+ * `prefilter` may drop a raw line before it is parsed, which is what keeps a
+ * rare term from costing a full-corpus parse. It must be a superset of the
+ * caller's matcher, or hits go missing with no error.
  */
 export async function* loadTurns(
   file: string,
