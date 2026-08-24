@@ -22,6 +22,15 @@ export function isRegexLiteral(s: string): boolean {
 }
 
 /**
+ * `--fixed` wins over `--regex`, so the pattern is a RegExp source only here.
+ * The prefilter reads the same predicate: were the two to disagree, it could
+ * narrow below the matcher and silently drop hits.
+ */
+export function patternIsRegexSource(opts: Options): boolean {
+  return opts.regex && !opts.fixed;
+}
+
+/**
  * Build a matcher from the parsed options. With no pattern at all, every line
  * matches and none reports ranges. Otherwise precedence: `--fixed` forces
  * literal substring even if the pattern looks like a regex; `--regex` compiles
@@ -38,7 +47,7 @@ export function buildMatcher(opts: Options): Matcher {
   }
 
   const flags = opts.ignoreCase ? "gi" : "g";
-  const source = opts.regex && !opts.fixed ? pattern : escapeRegex(pattern);
+  const source = patternIsRegexSource(opts) ? pattern : escapeRegex(pattern);
   let re: RegExp;
   try {
     re = new RegExp(source, flags);

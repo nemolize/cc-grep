@@ -1,4 +1,8 @@
-import { escapeRegex, isRegexLiteral } from "./matcher.js";
+import {
+  escapeRegex,
+  isRegexLiteral,
+  patternIsRegexSource,
+} from "./matcher.js";
 import type { Options } from "./types.js";
 
 export interface Prefilter {
@@ -74,7 +78,9 @@ const MIN_LITERAL_LENGTH = 3;
 export function buildPrefilter(opts: Options): Prefilter {
   const pattern = opts.pattern;
   if (pattern === undefined) return ACCEPT_ALL;
-  if (opts.regex && !opts.fixed && !isRegexLiteral(pattern)) return ACCEPT_ALL;
+  if (patternIsRegexSource(opts) && !isRegexLiteral(pattern)) {
+    return ACCEPT_ALL;
+  }
 
   const literal = longestRawSafeRun(pattern);
   if (literal.length < MIN_LITERAL_LENGTH) return ACCEPT_ALL;

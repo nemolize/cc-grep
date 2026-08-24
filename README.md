@@ -241,10 +241,13 @@ cc-grep "X" --json | jq -r .sessionId | head -1 | xargs -I{} cc-grep --session {
 
 ## How it works
 
-Each transcript line is parsed defensively: unrecognised line shapes and
-malformed JSON are skipped rather than crashing the scan, since the transcript
-schema is undocumented and drifts. Searchable text is pulled from message text,
-thinking blocks, tool inputs (e.g. the Bash command run), and tool results.
+A line that cannot contain the pattern is skipped before it is parsed — the raw
+text is tested for a literal the pattern requires, which for a rare term avoids
+almost all of the parsing. Every line that survives that test is parsed
+defensively: unrecognised line shapes and malformed JSON are skipped rather than
+crashing the scan, since the transcript schema is undocumented and drifts.
+Searchable text is pulled from message text, thinking blocks, tool inputs (e.g.
+the Bash command run), and tool results.
 
 A tool call's arguments become one `key: value` line each, with multi-line
 values keeping their real line breaks — so a hit inside a long heredoc shows its
@@ -289,8 +292,9 @@ lines that are not part of that value. The same rule decides a `⚙` inside a di
 value — transcripts do quote this tool's own output — so a second call opening
 there is read as content instead, a shape that is rare in practice.
 
-The scan is a plain linear read — fast enough (sub-second for a
-low-thousands-of-sessions corpus) that no index is needed.
+The scan is a plain linear read, with no index to build or keep fresh. Expect a
+couple of seconds on a large corpus — one 528 MB / 1,465-file transcript root
+measured ~1.4 s — dominated by reading the lines rather than by matching.
 
 ## Requirements
 
