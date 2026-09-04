@@ -65,7 +65,7 @@
     "lefthook": "^2.1.10",
     "npm-run-all2": "^9.0.3",
     "prettier": "^3.9.5",
-    "typescript": "^5.5.0",
+    "typescript": "^7.0.0",
     "typescript-eslint": "^8.63.0",
     "vitest": "^4.1.10"
   }
