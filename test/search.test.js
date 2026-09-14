@@ -12,7 +12,7 @@ function opts(root, over) {
     regex: false,
     fixed: false,
     ignoreCase: false,
-    root,
+    roots: new Map([["claude", root]]),
     role: "any",
     includeMeta: false,
     context: 2,

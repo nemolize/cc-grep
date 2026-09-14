@@ -1,18 +1,24 @@
 # cc-grep
 
-Grep across every Claude Code session transcript on your machine, so you can
-find past conversations by content — _"what did I discuss with Claude about X
-three weeks ago?"_
+Grep across every Claude Code and Codex session transcript on your machine, so
+you can find past conversations by content — _"what did I discuss with the agent
+about X three weeks ago?"_
 
-You solved something with Claude weeks ago and now hit the same problem — but
+You solved something with an agent weeks ago and now hit the same problem — but
 the shell history is gone and you can't remember which project it was in.
 `cc-grep "denyRead"` finds the turn; `--resume` drops you back into that
 session.
 
 Claude Code stores each session as a JSONL transcript under
-`~/.claude/projects/`. `cc-grep` scans them all and prints matching turns with
-their project, timestamp, session id, and role — plus a ready-to-run
-`claude --resume` command to jump back into any hit.
+`~/.claude/projects/`, and Codex stores one per thread under
+`~/.codex/sessions/`. `cc-grep` scans both and prints matching turns with their
+project, timestamp, session id, and role — plus a ready-to-run resume command
+(`claude --resume <id>` or `codex resume <id>`, whichever the hit came from) to
+jump back into any hit.
+
+Whichever root exists is searched, so a machine with only one agent installed
+needs no configuration. [Codex support](#codex-support) covers where the two
+sources differ.
 
 Read-only. Nothing ever leaves your machine.
 
@@ -42,8 +48,11 @@ $ npx @nemolize/cc-grep "auth flow"
 
 ### Scope
 
-- `--root <path>` — transcript root. Defaults to `$CC_GREP_ROOT`, else
-  `~/.claude/projects`.
+- `--source <claude|codex|both>` — which agent's transcripts to search
+  (default: `both`). A root that does not exist is skipped silently.
+- `--root <path>` — transcript root. On its own it pins Claude's root; with
+  `--source` it pins that one source's. Defaults are `$CC_GREP_ROOT`, else
+  `~/.claude/projects`, and `$CC_GREP_CODEX_ROOT`, else `~/.codex/sessions`.
 
 ### Filters
 
@@ -200,10 +209,43 @@ was attempted, and whether it landed lives in the paired result. An edit that
 failed on a stale `old_string` still matches — which is usually what you want,
 since the attempt is itself evidence that session was working on the file.
 
+This section is Claude-only: a Codex tool call records no path field, so `--file`
+never selects one and `--tool` takes Codex's own tool names — see
+[Codex support](#codex-support).
+
 `--json` carries a `toolCalls` array (`{name, paths}`) on any hit that made one,
 so the attribution is machine-readable without re-parsing the rendered lines.
 On a patternless search `matchedLines` comes back empty for the same reason the
 header stands alone — every line "matched", so listing them says nothing.
+
+## Codex support
+
+Codex transcripts are searched alongside Claude's by default, and a Codex hit is
+marked `codex` in its header so the two never read as one corpus. Everything the
+two schemas express the same way works identically — the pattern, `--role`,
+`--since` / `--until`, `--cwd`, `--session` dumps, `--subagents`, `-c` / `-l`,
+`--json` (which carries a `source` field), and the resume affordance.
+
+Three filters cannot mean the same thing on both sides, because Codex does not
+record what they read:
+
+- **`--file` never matches a Codex turn.** Codex passes a tool's arguments as one
+  opaque string — JavaScript source for `exec`, a JSON blob for a function call —
+  so no field is known to hold a path, and guessing one would attribute edits to
+  sessions that merely mentioned a filename. Grep for the path instead, or pass
+  `--source claude` to say which corpus you mean.
+- **`--tool` matches Codex's own tool names** (`exec`, `send_message`, …), not
+  Claude's `Edit` / `Write` / `Bash`. A name list written for one source selects
+  nothing in the other.
+- **`--branch` never matches a Codex turn**: Codex records no git branch.
+
+`--include-meta` reaches Codex's `developer` turns, which carry injected
+instructions rather than anything either party said — the role Claude's `isMeta`
+turns play.
+
+Codex writes one file per thread and records the spawning parent on each, so a
+subagent thread carries its parent's session id exactly as Claude's sidechain
+turns do; `--subagents` scopes both the same way.
 
 ## Recipes
 
@@ -229,6 +271,9 @@ cc-grep --tool Edit,Write --file src/format.ts --since 7d
 
 # List the unique sessions that mention X
 cc-grep "X" --json | jq -r .sessionId | sort -u
+
+# Only Codex sessions, only what the human typed
+cc-grep "X" --source codex --role user
 
 # Find the session that discussed X, then read how it started
 cc-grep "X" --json | jq -r .sessionId | head -1 | xargs -I{} cc-grep --session {} --role user

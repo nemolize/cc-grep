@@ -4,12 +4,8 @@ import { join } from "node:path";
 
 import { expect, test } from "vitest";
 
-import {
-  defaultRoot,
-  findTranscripts,
-  isReadableDir,
-  loadTurns,
-} from "../src/loader.js";
+import { findTranscripts, isReadableDir, loadTurns } from "../src/loader.js";
+import { sourceRoot } from "../src/source.js";
 
 async function withTempDir(fn) {
   const dir = await mkdtemp(join(tmpdir(), "cc-grep-test-"));
@@ -200,7 +196,13 @@ test("isReadableDir true for dir, false for missing", async () => {
   });
 });
 
-test("defaultRoot honors CC_GREP_ROOT then falls back", () => {
-  expect(defaultRoot({ CC_GREP_ROOT: "/env" }, "/home/u")).toBe("/env");
-  expect(defaultRoot({}, "/home/u")).toBe("/home/u/.claude/projects");
+test("sourceRoot honors each source's env override then falls back", () => {
+  expect(sourceRoot("claude", { CC_GREP_ROOT: "/env" }, "/home/u")).toBe(
+    "/env",
+  );
+  expect(sourceRoot("claude", {}, "/home/u")).toBe("/home/u/.claude/projects");
+  expect(sourceRoot("codex", { CC_GREP_CODEX_ROOT: "/cx" }, "/home/u")).toBe(
+    "/cx",
+  );
+  expect(sourceRoot("codex", {}, "/home/u")).toBe("/home/u/.codex/sessions");
 });

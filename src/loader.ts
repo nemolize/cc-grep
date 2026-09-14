@@ -3,10 +3,15 @@ import { readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 
+import {
+  type CodexFileState,
+  newCodexFileState,
+  parseCodexLine,
+} from "./codex.js";
 import { isRecord } from "./guards.js";
 import type { Prefilter } from "./prefilter.js";
 import { extractContent } from "./textExtract.js";
-import type { Turn } from "./types.js";
+import type { TranscriptSource, Turn } from "./types.js";
 
 // A single JSONL record over this many characters is either a pathological
 // tool-result dump or a corrupted file — skip it rather than pay the
@@ -49,16 +54,21 @@ export async function* findTranscripts(root: string): AsyncGenerator<string> {
 export async function* loadTurns(
   file: string,
   prefilter?: Prefilter,
+  source: TranscriptSource = "claude",
 ): AsyncGenerator<Turn> {
   const stream = createReadStream(file, { encoding: "utf8" });
   const rl = createInterface({ input: stream, crlfDelay: Infinity });
   let lineIndex = -1;
+  const codexState = source === "codex" ? newCodexFileState() : undefined;
   try {
     for await (const line of rl) {
       lineIndex++;
       if (line.length === 0) continue;
-      if (prefilter !== undefined && !prefilter.test(line)) continue;
-      const turn = parseLine(file, lineIndex, line);
+      if (line.length > MAX_JSONL_RECORD_CHARS) continue;
+      const turn =
+        codexState === undefined
+          ? parseClaudeLine(file, lineIndex, line, prefilter)
+          : parseCodexFileLine(file, lineIndex, line, prefilter, codexState);
       if (turn) yield turn;
     }
   } catch {
@@ -69,12 +79,39 @@ export async function* loadTurns(
   }
 }
 
-function parseLine(
+/**
+ * A metadata line is parsed even when the prefilter rejects it, because
+ * skipping one would lose the `cwd` and session id every later turn inherits.
+ */
+function parseCodexFileLine(
   file: string,
   lineIndex: number,
   line: string,
+  prefilter: Prefilter | undefined,
+  state: CodexFileState,
 ): Turn | undefined {
-  if (line.length > MAX_JSONL_RECORD_CHARS) return undefined;
+  if (
+    prefilter !== undefined &&
+    !prefilter.test(line) &&
+    !carriesCodexFileState(line)
+  ) {
+    return undefined;
+  }
+  return parseCodexLine(file, lineIndex, line, state);
+}
+
+/** Substring test on the raw line, so a metadata line survives the prefilter without a parse. */
+function carriesCodexFileState(line: string): boolean {
+  return line.includes('"session_meta"') || line.includes('"turn_context"');
+}
+
+function parseClaudeLine(
+  file: string,
+  lineIndex: number,
+  line: string,
+  prefilter: Prefilter | undefined,
+): Turn | undefined {
+  if (prefilter !== undefined && !prefilter.test(line)) return undefined;
   let parsed: unknown;
   try {
     parsed = JSON.parse(line);
@@ -98,6 +135,7 @@ function parseLine(
   return {
     file,
     lineIndex,
+    source: "claude",
     role,
     sessionId:
       typeof obj["sessionId"] === "string" ? obj["sessionId"] : undefined,
@@ -112,13 +150,6 @@ function parseLine(
     textLines,
     toolCalls,
   };
-}
-
-/** Resolve the default transcript root: `CC_GREP_ROOT` env, else `~/.claude/projects`. */
-export function defaultRoot(env: NodeJS.ProcessEnv, home: string): string {
-  const override = env["CC_GREP_ROOT"];
-  if (override !== undefined && override.length > 0) return override;
-  return join(home, ".claude", "projects");
 }
 
 /** True if `path` exists and is a directory. */

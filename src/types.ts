@@ -16,6 +16,8 @@ export interface Turn {
   file: string;
   /** 0-based line index within the file. */
   lineIndex: number;
+  /** Which agent wrote the transcript this turn came from. */
+  source: TranscriptSource;
   /** `type` field: `user` / `assistant` / etc. */
   role: string;
   sessionId?: string | undefined;
@@ -43,6 +45,9 @@ export interface Turn {
   toolCalls: ToolCall[];
 }
 
+/** Agent whose transcripts are being read; each has its own root and schema. */
+export type TranscriptSource = "claude" | "codex";
+
 export type RoleFilter = "user" | "assistant" | "any";
 
 export type SubagentScope = "include" | "exclude" | "only";
@@ -58,7 +63,11 @@ export interface Options {
   session?: string | undefined;
   regex: boolean;
   fixed: boolean;
-  root: string;
+  /**
+   * Roots to scan, one per source. `--root` pins a single source's root, so a
+   * missing entry means that source was excluded rather than defaulted.
+   */
+  roots: ReadonlyMap<TranscriptSource, string>;
   role: RoleFilter;
   sinceMs?: number | undefined;
   untilMs?: number | undefined;

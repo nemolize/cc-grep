@@ -1,5 +1,6 @@
 import { matchesToolCall, matchingPaths } from "./filters.js";
 import { buildMatcher } from "./matcher.js";
+import { resumeCommandFor } from "./source.js";
 import { TOOL_MARK } from "./textExtract.js";
 import { decorateToolLines } from "./toolRender.js";
 import type { ColorMode, Hit, Options, Turn } from "./types.js";
@@ -53,6 +54,14 @@ export const SUBAGENT_MARK = "▸sub";
 function sessionField(turn: Turn): string {
   const id = shortSession(turn.sessionId);
   return turn.isSidechain ? `${id} ${SUBAGENT_MARK}` : id;
+}
+
+/**
+ * Claude stays unmarked because its output is what every existing eye and
+ * script already reads; only the newer source needs telling apart.
+ */
+function sourceField(turn: Turn): string {
+  return turn.source === "codex" ? "codex  " : "";
 }
 
 function cyan(text: string, color: boolean): string {
@@ -139,7 +148,8 @@ export function formatHit(
   const headerText = (suffix: string) =>
     cyan(
       `${shortenPath(turn.cwd, home)}  ${formatTimestamp(turn.timestampMs)}  ` +
-        `${sessionField(turn)}  ${turn.role}${summary.text}${suffix}`,
+        `${sourceField(turn)}${sessionField(turn)}  ${turn.role}` +
+        `${summary.text}${suffix}`,
       color,
     );
 
@@ -226,7 +236,8 @@ export function formatDumpBanner(
   color: boolean,
 ): string {
   return cyan(
-    `session ${turn.sessionId ?? "?"}  ${shortenPath(turn.cwd, home)}` +
+    `${sourceField(turn)}session ${turn.sessionId ?? "?"}  ` +
+      shortenPath(turn.cwd, home) +
       (turn.gitBranch === undefined ? "" : `  (${turn.gitBranch})`),
     color,
   );
@@ -281,6 +292,7 @@ export function formatHitJson(hit: Hit, opts: Options, home: string): string {
   return JSON.stringify({
     file: turn.file,
     lineIndex: turn.lineIndex,
+    source: turn.source,
     cwd: turn.cwd,
     cwdShort: shortenPath(turn.cwd, home),
     timestamp: turn.timestamp,
@@ -301,9 +313,9 @@ export function formatHitJson(hit: Hit, opts: Options, home: string): string {
   });
 }
 
-/** The `claude --resume <id>` affordance line for a hit, if it has a session id. */
+/** The resume line for a hit, worded for the hit's own agent so a copied command cannot reopen it under the other. */
 export function resumeCommand(hit: Hit): string | undefined {
   const id = hit.turn.sessionId;
   if (id === undefined || id === "") return undefined;
-  return `claude --resume ${id}`;
+  return resumeCommandFor(hit.turn.source, id);
 }

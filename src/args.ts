@@ -1,16 +1,17 @@
 import { parseArgs as parseNodeArgs } from "node:util";
 
 import { parseSinceUntil } from "./duration.js";
-import { defaultRoot } from "./loader.js";
+import { ALL_SOURCES, sourceRoot } from "./source.js";
 import type {
   ColorMode,
   Options,
   RoleFilter,
   SubagentScope,
   SummaryMode,
+  TranscriptSource,
 } from "./types.js";
 
-export const HELP = `cc-grep — grep across Claude Code session transcripts
+export const HELP = `cc-grep — grep across Claude Code and Codex session transcripts
 
 Usage:
   cc-grep <pattern> [options]
@@ -24,7 +25,13 @@ Pattern:
   -i, --ignore-case    Case-insensitive match
 
 Scope:
-  --root <path>        Transcript root (default: $CC_GREP_ROOT or ~/.claude/projects)
+  --source <claude|codex|both>
+                       Which agent's transcripts to search (default: both;
+                       a root that does not exist is skipped silently)
+  --root <path>        Transcript root; with --source it pins that one source,
+                       otherwise it pins Claude's
+                       (defaults: $CC_GREP_ROOT or ~/.claude/projects,
+                        $CC_GREP_CODEX_ROOT or ~/.codex/sessions)
   Dash-prefixed option values require --option=value (e.g. --cwd=-generated).
 
 Filters:
@@ -53,7 +60,8 @@ Context & output:
   --json               Emit one JSON object per hit — or per session with -l,
                        or a single {"hits":N} with -c (pipeline-friendly)
   --color <always|never|auto>   Colorize output (default: auto)
-  --resume             Print \`claude --resume <id>\` for the top hit
+  --resume             Print the resume command for the top hit
+                       (\`claude --resume <id>\` / \`codex resume <id>\`)
   --print-resume       Print the resume command for every hit
   -h, --help           Show this help
   -V, --version        Show version
@@ -65,6 +73,7 @@ Examples:
   cc-grep "auth flow" --role user --subagents exclude  Only what the human asked
   cc-grep "auth flow" --since 30d -m 20                Recent, capped at 20 hits
   cc-grep --session a1b2c3d4 --role user               Read one session's asks
+  cc-grep "auth flow" --source codex                   Only Codex transcripts
 
 A broad pattern can match thousands of turns and print megabytes. Survey with
 -c or -l first, then narrow with the filters above or cap with -m.
@@ -81,6 +90,7 @@ const ARG_OPTIONS = {
   fixed: { type: "boolean", short: "F" },
   "ignore-case": { type: "boolean", short: "i" },
   root: { type: "string" },
+  source: { type: "string" },
   session: { type: "string" },
   role: { type: "string" },
   since: { type: "string" },
@@ -302,6 +312,36 @@ export function parseArgs(
     }
   }
 
+  const sourceValue = values.source;
+  if (
+    sourceValue !== undefined &&
+    sourceValue !== "claude" &&
+    sourceValue !== "codex" &&
+    sourceValue !== "both"
+  ) {
+    return err(
+      `--source must be one of claude|codex|both (got "${sourceValue}")`,
+    );
+  }
+  const explicitSource: TranscriptSource | undefined =
+    sourceValue === undefined || sourceValue === "both"
+      ? undefined
+      : sourceValue;
+  const sources: readonly TranscriptSource[] =
+    explicitSource === undefined ? ALL_SOURCES : [explicitSource];
+
+  // Narrowed to one source because reading one tree under both schemas would
+  // report each turn twice; bare `--root` still means Claude's, as it always did.
+  const rootedSources: readonly TranscriptSource[] =
+    values.root === undefined ? sources : [explicitSource ?? "claude"];
+
+  const roots = new Map<TranscriptSource, string>(
+    rootedSources.map((source) => [
+      source,
+      values.root ?? sourceRoot(source, env, home),
+    ]),
+  );
+
   const colorValue = values.color;
   if (
     colorValue !== undefined &&
@@ -327,7 +367,7 @@ export function parseArgs(
       regex: values.regex ?? false,
       fixed: values.fixed ?? false,
       ignoreCase: values["ignore-case"] ?? false,
-      root: values.root ?? defaultRoot(env, home),
+      roots,
       role,
       sinceMs,
       untilMs,

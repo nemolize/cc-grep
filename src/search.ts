@@ -5,7 +5,7 @@ import { buildPrefilter } from "./prefilter.js";
 import type { Hit, Options } from "./types.js";
 
 /**
- * Stream hits across every transcript under `opts.root`. For each turn that
+ * Stream hits across every transcript under each of `opts.roots`. For each turn that
  * passes the metadata filters, the matcher is run per text line; a turn with
  * ≥1 matching line yields one `Hit` carrying the matched line indices. Files
  * are processed sequentially and lazily so a large corpus streams rather than
@@ -16,18 +16,20 @@ export async function* search(opts: Options): AsyncGenerator<Hit> {
   const prefilter = buildPrefilter(opts);
   let yielded = 0;
 
-  for await (const file of findTranscripts(opts.root)) {
-    for await (const turn of loadTurns(file, prefilter)) {
-      if (!passesFilters(turn, opts)) continue;
+  for (const [source, root] of opts.roots) {
+    for await (const file of findTranscripts(root)) {
+      for await (const turn of loadTurns(file, prefilter, source)) {
+        if (!passesFilters(turn, opts)) continue;
 
-      const matchedLineIndices: number[] = [];
-      for (const [i, line] of turn.textLines.entries()) {
-        if (matcher.test(line)) matchedLineIndices.push(i);
-      }
-      if (matchedLineIndices.length > 0) {
-        yield { turn, matchedLineIndices };
-        yielded++;
-        if (opts.maxCount !== undefined && yielded >= opts.maxCount) return;
+        const matchedLineIndices: number[] = [];
+        for (const [i, line] of turn.textLines.entries()) {
+          if (matcher.test(line)) matchedLineIndices.push(i);
+        }
+        if (matchedLineIndices.length > 0) {
+          yield { turn, matchedLineIndices };
+          yielded++;
+          if (opts.maxCount !== undefined && yielded >= opts.maxCount) return;
+        }
       }
     }
   }

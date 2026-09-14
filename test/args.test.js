@@ -220,14 +220,14 @@ test.each([
 });
 
 test.each([
-  ["--root", "-"],
-  ["--cwd", "-generated"],
-  ["--branch", "-wip"],
-])("%s accepts an inline dash-prefixed value", (option, value) => {
+  ["--root", "-", (o) => o.roots.get("claude")],
+  ["--cwd", "-generated", (o) => o.cwd],
+  ["--branch", "-wip", (o) => o.branch],
+])("%s accepts an inline dash-prefixed value", (option, value, read) => {
   const result = parse(["p", `${option}=${value}`]);
   expect(result.kind).toBe("options");
   if (result.kind === "options") {
-    expect(result.options[option.slice(2)]).toBe(value);
+    expect(read(result.options)).toBe(value);
   }
 });
 
@@ -247,18 +247,20 @@ test("extra positional argument errors", () => {
 
 test("CC_GREP_ROOT overrides default root", () => {
   const r = parse(["p"], { CC_GREP_ROOT: "/custom" });
-  if (r.kind === "options") expect(r.options.root).toBe("/custom");
+  if (r.kind === "options")
+    expect(r.options.roots.get("claude")).toBe("/custom");
 });
 
 test("default root falls back to ~/.claude/projects", () => {
   const r = parse(["p"]);
   if (r.kind === "options")
-    expect(r.options.root).toBe("/home/u/.claude/projects");
+    expect(r.options.roots.get("claude")).toBe("/home/u/.claude/projects");
 });
 
 test("--root explicit beats env", () => {
   const r = parse(["p", "--root", "/explicit"], { CC_GREP_ROOT: "/env" });
-  if (r.kind === "options") expect(r.options.root).toBe("/explicit");
+  if (r.kind === "options")
+    expect(r.options.roots.get("claude")).toBe("/explicit");
 });
 
 test("--session makes the pattern optional", () => {

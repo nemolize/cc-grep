@@ -17,7 +17,7 @@ import {
 import { isRecord } from "./guards.js";
 import { isReadableDir } from "./loader.js";
 import { search } from "./search.js";
-import type { Hit } from "./types.js";
+import type { Hit, Options, TranscriptSource } from "./types.js";
 
 /** Read at runtime rather than hardcoded: a literal drifts from package.json on release. */
 function readVersion(): string {
@@ -72,15 +72,27 @@ async function main(): Promise<number> {
       return 2;
   }
 
-  const opts = parsed.options;
+  const requested = parsed.options;
 
-  if (!(await isReadableDir(opts.root))) {
+  // A machine with only one agent installed is the normal case, so a missing
+  // root is dropped silently and only an empty result is an error.
+  const readableRoots = new Map<TranscriptSource, string>();
+  for (const [source, root] of requested.roots) {
+    if (await isReadableDir(root)) readableRoots.set(source, root);
+  }
+  if (readableRoots.size === 0) {
+    const listed = [...requested.roots.values()]
+      .map((r) => `"${r}"`)
+      .join(", ");
     process.stderr.write(
-      `cc-grep: no transcripts found — "${opts.root}" is not a readable directory\n` +
-        `Set --root or CC_GREP_ROOT if your transcripts live elsewhere.\n`,
+      `cc-grep: no transcripts found — ${listed} ` +
+        `${requested.roots.size > 1 ? "are" : "is"} not a readable directory\n` +
+        `Set --root, CC_GREP_ROOT or CC_GREP_CODEX_ROOT if your transcripts ` +
+        `live elsewhere.\n`,
     );
     return 1;
   }
+  const opts: Options = { ...requested, roots: readableRoots };
 
   // Typed `boolean`, but Node leaves it `undefined` when stdout is not a TTY.
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-boolean-literal-compare
