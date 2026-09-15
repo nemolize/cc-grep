@@ -1,5 +1,6 @@
 import { expect, test } from "vitest";
 
+import { newCodexFileState, parseCodexLine } from "../src/codex.js";
 import { buildMatcher } from "../src/matcher.js";
 import { buildPrefilter } from "../src/prefilter.js";
 import { extractTextLines } from "../src/textExtract.js";
@@ -76,6 +77,53 @@ for (const ignoreCase of [false, true]) {
         continue;
       }
       const lines = extractTextLines(decoded.message.content);
+
+      for (const line of lines) {
+        for (const pattern of patternsFrom(line)) {
+          const cased = ignoreCase ? pattern.toUpperCase() : pattern;
+          const o = opts({ pattern: cased, ignoreCase });
+          const matcher = buildMatcher(o);
+          if (!lines.some((l) => matcher.test(l))) continue;
+
+          if (!buildPrefilter(o).test(raw)) {
+            violations.push({ raw, pattern: cased });
+          }
+        }
+      }
+    }
+
+    expect(violations.slice(0, 5)).toEqual([]);
+  });
+}
+
+/**
+ * The Codex parser renders lines of its own, so it can diverge from the raw
+ * bytes exactly as `textExtract` can, and as silently.
+ */
+const CODEX_RAW_LINES = [
+  `{"timestamp":"2026-07-12T00:00:00Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"plain ratatui text"}]}}`,
+  `{"timestamp":"2026-07-12T00:00:00Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"escaped ${BS}u003e=8.0.15 here"}]}}`,
+  `{"timestamp":"2026-07-12T00:00:00Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"${BS}u0072atatui leading"}]}}`,
+  `{"timestamp":"2026-07-12T00:00:00Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"quote ${BS}"inner${BS}" done"}]}}`,
+  `{"timestamp":"2026-07-12T00:00:00Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"tab${BS}tsep and nl${BS}nsplit"}]}}`,
+  `{"timestamp":"2026-07-12T00:00:00Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"backslash ${BS}${BS} literal"}]}}`,
+  `{"timestamp":"2026-07-12T00:00:00Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"unicode ワークツリー here"}]}}`,
+  `{"timestamp":"2026-07-12T00:00:00Z","type":"response_item","payload":{"type":"custom_tool_call","name":"exec","input":"tools.exec_command({cmd:${BS}"rg ratatui${BS}"})"}}`,
+  `{"timestamp":"2026-07-12T00:00:00Z","type":"response_item","payload":{"type":"custom_tool_call","name":"exec","input":"first${BS}nsecond 1.50 line"}}`,
+  `{"timestamp":"2026-07-12T00:00:00Z","type":"response_item","payload":{"type":"function_call","name":"send_message","arguments":"{${BS}"target${BS}":${BS}"/root${BS}"}"}}`,
+  `{"timestamp":"2026-07-12T00:00:00Z","type":"response_item","payload":{"type":"custom_tool_call_output","output":"exit_code 0${BS}noutput ratatui"}}`,
+  `{"timestamp":"2026-07-12T00:00:00Z","type":"response_item","payload":{"type":"custom_tool_call_output","output":[{"type":"input_text","text":"array ${BS}u003c form"}]}}`,
+];
+
+for (const ignoreCase of [false, true]) {
+  test(`the codex parser keeps the prefilter a superset (ignoreCase=${String(ignoreCase)})`, () => {
+    const violations = [];
+
+    for (const raw of CODEX_RAW_LINES) {
+      const state = newCodexFileState();
+      const turn = parseCodexLine("/f.jsonl", 0, raw, state);
+      if (turn === undefined) continue;
+      const lines = turn.textLines;
 
       for (const line of lines) {
         for (const pattern of patternsFrom(line)) {

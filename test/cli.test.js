@@ -15,11 +15,27 @@ import { expect, test } from "vitest";
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const cliPath = join(repoRoot, "dist", "cli.js");
 
-function runCli(args) {
+// The roots default off $HOME, so a test that does not name one would read the
+// developer's own transcripts and its result would vary per machine.
+function cliEnv(env) {
+  return { ...process.env, HOME: "/nonexistent-home", ...env };
+}
+
+function runCli(args, env) {
   if (!existsSync(cliPath)) {
     throw new Error(`${cliPath} not found — run \`pnpm run build\` first`);
   }
-  return execFileSync("node", [cliPath, ...args], { encoding: "utf8" });
+  return execFileSync("node", [cliPath, ...args], {
+    encoding: "utf8",
+    env: cliEnv(env),
+  });
+}
+
+function spawnCli(args, env) {
+  return spawnSync("node", [cliPath, ...args, "--color", "never"], {
+    encoding: "utf8",
+    env: cliEnv(env),
+  });
 }
 
 test("--version reports the version in package.json", () => {
@@ -104,6 +120,7 @@ test("--json pairs with the summary flags", () => {
       .map((l) => JSON.parse(l));
     expect(rows.length).toBe(2);
     expect(rows[0]).toEqual({
+      source: "claude",
       sessionId: "bbbbbbbb-1111-2222-3333-444444444444",
       hits: 2,
       cwd: "/proj-b",
@@ -156,19 +173,11 @@ test("sessionless turns in different files stay separate sessions", () => {
 
 test("--max-count notes on stderr that it capped", () => {
   withCorpus((root) => {
-    const capped = spawnSync(
-      "node",
-      [cliPath, "needle", "--root", root, "-m", "1", "--color", "never"],
-      { encoding: "utf8" },
-    );
+    const capped = spawnCli(["needle", "--root", root, "-m", "1"]);
     expect(capped.stderr).toContain("--max-count");
 
     // Uncapped runs must stay quiet, or the note becomes noise on every search.
-    const uncapped = spawnSync(
-      "node",
-      [cliPath, "needle", "--root", root, "--color", "never"],
-      { encoding: "utf8" },
-    );
+    const uncapped = spawnCli(["needle", "--root", root]);
     expect(uncapped.stderr).toBe("");
   });
 });
@@ -213,4 +222,147 @@ test("a summary with no hits still exits 1, like a search", () => {
       expect.objectContaining({ status: 1 }),
     );
   });
+});
+
+// One agent per machine is the normal case, so the absent root is not an error
+// — but the run must still search the one that is there.
+test("a defaulted root that does not exist is skipped, not fatal", () => {
+  withCorpus((root) => {
+    expect(runCli(["needle", "-c"], { CC_GREP_ROOT: root }).trim()).toBe("3");
+  });
+});
+
+// Distinct from the row above: the user named this path, so silently searching
+// the other source would answer a question they did not ask.
+test("a named root that does not exist is an error, even when the other is readable", () => {
+  withCorpus((root) => {
+    expect(() =>
+      runCli(["needle", "-c"], {
+        CC_GREP_ROOT: root,
+        CC_GREP_CODEX_ROOT: "/nonexistent-codex-root",
+      }),
+    ).toThrow(expect.objectContaining({ status: 1 }));
+  });
+});
+
+// A stale CC_GREP_CODEX_ROOT in a shell profile otherwise surfaces as a bare
+// path, leaving the reader to guess which of three places set it.
+test("the error names what set an unreadable root, and how to fix it", () => {
+  let err;
+  try {
+    runCli(["needle", "-c"], { CC_GREP_CODEX_ROOT: "/nonexistent-codex" });
+  } catch (e) {
+    err = e;
+  }
+  expect(err.status).toBe(1);
+  expect(err.stderr).toContain('"/nonexistent-codex" (CC_GREP_CODEX_ROOT)');
+  expect(err.stderr).toContain("Set --root");
+});
+
+// Silence here reads as "Codex has none of these" when the truth is that the
+// filter cannot ask Codex at all.
+test("a Claude-only filter says so when a Codex root is in scope", () => {
+  withCorpus((root) => {
+    const codexDir = mkdtempSync(join(tmpdir(), "cc-grep-cli-cx-"));
+    try {
+      const run = spawnCli(["needle", "--file", "src", "-c"], {
+        CC_GREP_ROOT: root,
+        CC_GREP_CODEX_ROOT: codexDir,
+      });
+      expect(run.stderr).toContain("--file");
+      expect(run.stderr).toContain("Claude only");
+    } finally {
+      rmSync(codexDir, { recursive: true, force: true });
+    }
+  });
+});
+
+test("the notice stays quiet when no Codex root is in scope", () => {
+  withCorpus((root) => {
+    const run = spawnCli([
+      "needle",
+      "--file",
+      "src",
+      "--root",
+      root,
+      "--source",
+      "claude",
+      "-c",
+    ]);
+    expect(run.stderr).toBe("");
+  });
+});
+
+test("every root missing names them all", () => {
+  let err;
+  try {
+    runCli(["needle", "-c"], {
+      CC_GREP_ROOT: "/nonexistent-a",
+      CC_GREP_CODEX_ROOT: "/nonexistent-b",
+    });
+  } catch (e) {
+    err = e;
+  }
+  expect(err.status).toBe(1);
+  expect(err.stderr).toContain("/nonexistent-a");
+  expect(err.stderr).toContain("/nonexistent-b");
+});
+
+test("a codex root is searched under the codex schema end to end", () => {
+  const dir = mkdtempSync(join(tmpdir(), "cc-grep-cli-codex-"));
+  try {
+    writeFileSync(
+      join(dir, "rollout-2026-07-13T00-00-00-t1.jsonl"),
+      [
+        JSON.stringify({
+          timestamp: "2026-07-13T00:00:00Z",
+          type: "session_meta",
+          payload: {
+            session_id: "cx-1",
+            id: "cx-1",
+            cwd: "/cx-proj",
+            thread_source: "user",
+          },
+        }),
+        JSON.stringify({
+          timestamp: "2026-07-13T00:01:00Z",
+          type: "response_item",
+          payload: {
+            type: "message",
+            role: "user",
+            content: [{ type: "input_text", text: "a needle here" }],
+          },
+        }),
+      ].join("\n"),
+    );
+    const rows = runCli([
+      "needle",
+      "--source",
+      "codex",
+      "--codex-root",
+      dir,
+      "-l",
+      "--json",
+    ])
+      .trim()
+      .split("\n")
+      .map((l) => JSON.parse(l));
+    expect(rows).toEqual([
+      { source: "codex", sessionId: "cx-1", hits: 1, cwd: "/cx-proj" },
+    ]);
+    expect(
+      runCli([
+        "needle",
+        "--source",
+        "codex",
+        "--codex-root",
+        dir,
+        "-m",
+        "1",
+        "--print-resume",
+      ]),
+    ).toContain("codex resume cx-1");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

@@ -12,7 +12,7 @@ function opts(root, over) {
     regex: false,
     fixed: false,
     ignoreCase: false,
-    root,
+    roots: new Map([["claude", { path: root }]]),
     role: "any",
     includeMeta: false,
     context: 2,
@@ -515,4 +515,69 @@ test("a hit survives when an overflowing number renders as null", async () => {
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+async function withCodexCorpus(fn) {
+  const dir = await mkdtemp(join(tmpdir(), "cc-grep-codex-search-"));
+  await writeFile(
+    join(dir, "rollout-2026-07-12T00-00-00-t1.jsonl"),
+    [
+      JSON.stringify({
+        timestamp: "2026-07-12T00:00:00Z",
+        type: "session_meta",
+        payload: {
+          session_id: "cx-1",
+          id: "cx-1",
+          cwd: "/cx-proj",
+          thread_source: "user",
+        },
+      }),
+      JSON.stringify({
+        timestamp: "2026-07-12T00:01:00Z",
+        type: "response_item",
+        payload: {
+          type: "message",
+          role: "user",
+          content: [{ type: "input_text", text: "a codex needle" }],
+        },
+      }),
+    ].join("\n"),
+  );
+  try {
+    await fn(dir);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
+// Pins the wiring rather than the parser, because dropping `source` at the
+// loadTurns call leaves every other test green while Codex support dies.
+test("a codex root is read with the codex parser", async () => {
+  await withCodexCorpus(async (dir) => {
+    const hits = await collect({
+      ...opts(dir, {}),
+      roots: new Map([["codex", { path: dir }]]),
+    });
+    expect(hits.length).toBe(1);
+    expect(hits[0].turn.source).toBe("codex");
+    expect(hits[0].turn.sessionId).toBe("cx-1");
+    expect(hits[0].turn.cwd).toBe("/cx-proj");
+  });
+});
+
+test("a mixed roots map reads each tree under its own schema", async () => {
+  await corpus(async (claudeDir) => {
+    await withCodexCorpus(async (codexDir) => {
+      const hits = await collect({
+        ...opts(claudeDir, {}),
+        roots: new Map([
+          ["claude", { path: claudeDir }],
+          ["codex", { path: codexDir }],
+        ]),
+      });
+      const bySource = hits.map((h) => h.turn.source);
+      expect(bySource).toContain("claude");
+      expect(bySource).toContain("codex");
+    });
+  });
 });

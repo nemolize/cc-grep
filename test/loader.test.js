@@ -1,15 +1,17 @@
-import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { expect, test } from "vitest";
 
-import {
-  defaultRoot,
-  findTranscripts,
-  isReadableDir,
-  loadTurns,
-} from "../src/loader.js";
+import { findTranscripts, isReadableDir, loadTurns } from "../src/loader.js";
 
 async function withTempDir(fn) {
   const dir = await mkdtemp(join(tmpdir(), "cc-grep-test-"));
@@ -193,14 +195,24 @@ test("findTranscripts on a missing root yields nothing", async () => {
   expect(found.length).toBe(0);
 });
 
+// An unreadable root is reported as an error rather than as no hits, so the
+// check has to reach the permission bit `findTranscripts` would trip over.
+test("isReadableDir is false for a directory that cannot be read", async () => {
+  await withTempDir(async (dir) => {
+    const locked = join(dir, "locked");
+    await mkdir(locked);
+    await chmod(locked, 0o000);
+    try {
+      expect(await isReadableDir(locked)).toBe(false);
+    } finally {
+      await chmod(locked, 0o755);
+    }
+  });
+});
+
 test("isReadableDir true for dir, false for missing", async () => {
   await withTempDir(async (dir) => {
     expect(await isReadableDir(dir)).toBe(true);
     expect(await isReadableDir(join(dir, "nope"))).toBe(false);
   });
-});
-
-test("defaultRoot honors CC_GREP_ROOT then falls back", () => {
-  expect(defaultRoot({ CC_GREP_ROOT: "/env" }, "/home/u")).toBe("/env");
-  expect(defaultRoot({}, "/home/u")).toBe("/home/u/.claude/projects");
 });

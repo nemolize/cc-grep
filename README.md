@@ -1,18 +1,24 @@
 # cc-grep
 
-Grep across every Claude Code session transcript on your machine, so you can
-find past conversations by content — _"what did I discuss with Claude about X
-three weeks ago?"_
+Grep across every Claude Code and Codex session transcript on your machine, so
+you can find past conversations by content — _"what did I discuss with the agent
+about X three weeks ago?"_
 
-You solved something with Claude weeks ago and now hit the same problem — but
+You solved something with an agent weeks ago and now hit the same problem — but
 the shell history is gone and you can't remember which project it was in.
 `cc-grep "denyRead"` finds the turn; `--resume` drops you back into that
 session.
 
 Claude Code stores each session as a JSONL transcript under
-`~/.claude/projects/`. `cc-grep` scans them all and prints matching turns with
-their project, timestamp, session id, and role — plus a ready-to-run
-`claude --resume` command to jump back into any hit.
+`~/.claude/projects/`, and Codex stores one per thread under
+`~/.codex/sessions/`. `cc-grep` scans both and prints matching turns with their
+project, timestamp, session id, and role — plus a ready-to-run resume command
+(`claude --resume <id>` or `codex resume <id>`, whichever the hit came from) to
+jump back into any hit.
+
+Whichever root exists is searched, so a machine with only one agent installed
+needs no configuration. [Codex support](#codex-support) covers where the two
+sources differ.
 
 Read-only. Nothing ever leaves your machine.
 
@@ -22,7 +28,8 @@ Read-only. Nothing ever leaves your machine.
 npx @nemolize/cc-grep <pattern> [options]
 cc-grep <pattern> [options]              # once installed globally
 cc-grep --session <id> [pattern]         # read one session as a conversation
-cc-grep --tool Edit --file <path>        # find which session touched a file
+cc-grep --source codex <pattern>         # one agent's transcripts only
+cc-grep --tool Edit --file <path>        # which session touched a file (Claude)
 ```
 
 ```
@@ -42,8 +49,16 @@ $ npx @nemolize/cc-grep "auth flow"
 
 ### Scope
 
-- `--root <path>` — transcript root. Defaults to `$CC_GREP_ROOT`, else
-  `~/.claude/projects`.
+- `--source <claude|codex|both>` — which agent's transcripts to search
+  (default: `both`). A root nobody named — `~/.claude/projects` or
+  `~/.codex/sessions` — is skipped when it does not exist, so a machine with one
+  agent installed needs no configuration. A root you **named** — by flag or by
+  env var — is an error when it is unreadable: searching the other source
+  instead would answer a question you did not ask.
+- `--root <path>` / `--codex-root <path>` — one flag per source, so either can
+  be relocated without changing what the other means. Each falls back to its env
+  override — `$CC_GREP_ROOT`, `$CC_GREP_CODEX_ROOT` — and then to the path
+  above.
 
 ### Filters
 
@@ -103,8 +118,9 @@ combination is a usage error rather than a silently dropped flag.
 - `-C, --context <N>` — lines of context around each match (default: 2).
 - `--json` — emit one JSON object per hit, one per line, for piping to `jq`.
 - `--color <always|never|auto>` — colorize output (default: auto-detects a TTY).
-- `--resume` — print `claude --resume <id>` for the top hit only. Use once
-  your filters have narrowed things down to the session you want.
+- `--resume` — print the resume command for the top hit only, worded for the
+  agent that hit came from. Use once your filters have narrowed things down to
+  the session you want.
 - `--print-resume` — print the resume command for every hit. Use while
   browsing, so any hit can be jumped into.
 
@@ -125,7 +141,8 @@ user  2026-07-10 21:34
   │ …
 ```
 
-- The id can be a prefix — the 8-char form the search output prints is enough.
+- The id can be a prefix — the short form the search output prints is enough
+  (8 characters for Claude; 18 for Codex, whose ids share a leading timestamp).
   A prefix matching several sessions dumps each and warns on stderr, so widen it.
 - Subagent turns are left out by default; `--subagents=include` puts them back.
   See [Subagent turns](#subagent-turns).
@@ -142,11 +159,11 @@ context window. Reading a past conversation as text is a different job.
 
 ## Subagent turns
 
-A subagent's transcript lives beside its parent's and carries the _parent's_
-session id, so its turns look like ordinary ones. They are not: a subagent's
-`user` turn is the prompt an orchestrator injected into a spawned agent, not
-something the human typed. In a fan-out-heavy session they can outnumber the
-conversation itself.
+A subagent's transcript is a file of its own — beside its parent's for Claude,
+one per thread for Codex — and carries the _parent's_ session id, so its turns
+look like ordinary ones. They are not: a subagent's `user` turn is the prompt an
+orchestrator injected into a spawned agent, not something the human typed. In a
+fan-out-heavy session they can outnumber the conversation itself.
 
 Hits from a subagent are marked on the header, right after the session id:
 
@@ -169,7 +186,10 @@ includes them, a `--session` dump excludes them:
 - `only` — what you want when auditing what a fan-out did.
 
 `--json` names the relation rather than leaving it to be inferred from the file
-path: `isSubagent`, plus `agentId` and `parentSessionId` on a subagent hit.
+path: `isSubagent`, plus `agentId` on a subagent hit and `parentSessionId`
+whenever the transcript recorded a parent. A handful of old Codex rollouts
+recorded none; there `sessionId` is the thread's own id and `parentSessionId` is
+absent rather than repeating it.
 
 ## Finding which session touched a file
 
@@ -200,10 +220,60 @@ was attempted, and whether it landed lives in the paired result. An edit that
 failed on a stale `old_string` still matches — which is usually what you want,
 since the attempt is itself evidence that session was working on the file.
 
+This section is Claude-only: a Codex tool call records no path field, so `--file`
+never selects one and `--tool` takes Codex's own tool names — see
+[Codex support](#codex-support).
+
 `--json` carries a `toolCalls` array (`{name, paths}`) on any hit that made one,
 so the attribution is machine-readable without re-parsing the rendered lines.
 On a patternless search `matchedLines` comes back empty for the same reason the
 header stands alone — every line "matched", so listing them says nothing.
+
+## Codex support
+
+Codex transcripts are searched alongside Claude's by default, and a Codex hit is
+marked `codex` in its header so the two never read as one corpus. Everything the
+two schemas express the same way works identically — the pattern, `--role`,
+`--since` / `--until`, `--cwd`, `--session` dumps, `--subagents`, `-c` / `-l`,
+`--json` (which carries a `source` field), and the resume affordance.
+
+Three filters read something Codex records differently, or not at all:
+
+- **`--file` never matches a Codex turn.** Codex passes a tool's arguments as one
+  opaque string — JavaScript source for `exec`, a JSON blob for a function call —
+  so no field is known to hold a path, and guessing one would attribute edits to
+  sessions that merely mentioned a filename. Grep for the path instead. A run
+  that pairs it with a Codex root says on stderr that it searched Claude only,
+  so an empty result is never mistaken for "Codex has none either".
+- **`--tool` matches Codex's own tool names** (`exec`, `send_message`,
+  `web_search_call`, …), not Claude's `Edit` / `Write` / `Bash`. Unlike the
+  other two it still works on Codex — under a Codex name — so a name list
+  written for one source simply selects nothing in the other, with no notice.
+- **`--branch` never matches a Codex turn** — not yet. Codex does record the
+  branch on a rollout's `session_meta` (absent only outside a repo), but only
+  there: it is the branch at session start rather than Claude's per-turn value,
+  so reading it is a different filter than the one `--branch` documents. Until
+  that is settled the field is left unset, and a `--branch` run says on stderr
+  that it searched Claude only, the same way `--file` does.
+
+`--include-meta` reaches Codex's `developer` turns, which carry injected
+instructions rather than anything either party said — the role Claude's `isMeta`
+turns play.
+
+What a Codex session searched for is searchable too: a `web_search_call` or
+`tool_search_call` records its query in plaintext, and those queries are pulled
+in like any other tool input.
+
+Codex's reasoning is stored encrypted, so only the one-line summary some
+rollouts record beside it is searchable — current Codex writes that field empty,
+so in practice this reaches older transcripts. Claude's thinking blocks are
+searchable in full, as usual.
+
+Codex writes one file per thread and usually records the spawning parent on it,
+so a subagent thread carries its parent's session id exactly as Claude's
+sidechain turns do; `--subagents` scopes both the same way. Some early rollouts
+are the exception: they mark the thread as a subagent without naming a parent,
+so it carries its own id instead and is searchable under that.
 
 ## Recipes
 
@@ -227,8 +297,14 @@ cc-grep "X" --cwd myrepo
 # Which session touched this file, and when?
 cc-grep --tool Edit,Write --file src/format.ts --since 7d
 
-# List the unique sessions that mention X
-cc-grep "X" --json | jq -r .sessionId | sort -u
+# List the unique sessions that mention X (source included: the id spaces overlap)
+cc-grep "X" --json | jq -r '"\(.source) \(.sessionId)"' | sort -u
+
+# Only Codex sessions, only what the human typed
+cc-grep "X" --source codex --role user
+
+# What did a Codex session search the web for?
+cc-grep "X" --tool web_search_call,tool_search_call --source codex
 
 # Find the session that discussed X, then read how it started
 cc-grep "X" --json | jq -r .sessionId | head -1 | xargs -I{} cc-grep --session {} --role user
@@ -236,18 +312,25 @@ cc-grep "X" --json | jq -r .sessionId | head -1 | xargs -I{} cc-grep --session {
 
 ## Exit status
 
-`0` when at least one hit is found, `1` when none, `2` on a usage error
-(following the `grep` convention).
+`0` when at least one hit is found, `1` when none — including when a root you
+named turned out to be unreadable — and `2` on a usage error (following the
+`grep` convention).
 
 ## How it works
 
 A line that cannot contain the pattern is skipped before it is parsed — the raw
 text is tested for a literal the pattern requires, which for a rare term avoids
-almost all of the parsing. Every line that survives that test is parsed
+almost all of the parsing. (A Codex rollout's `session_meta` and `turn_context`
+lines are parsed regardless, since every later turn in the file inherits the
+`cwd` and session id they carry.) Every line that survives that test is parsed
 defensively: unrecognised line shapes and malformed JSON are skipped rather than
-crashing the scan, since the transcript schema is undocumented and drifts.
+crashing the scan, since neither transcript schema is documented and both drift.
 Searchable text is pulled from message text, thinking blocks, tool inputs (e.g.
 the Bash command run), and tool results.
+
+The rest of this section describes the Claude transcript. A Codex tool call
+carries its arguments as one opaque string rather than a keyed object, so the
+shaping below does not apply to it — the line shows the payload as recorded.
 
 A tool call's arguments become one `key: value` line each, with multi-line
 values keeping their real line breaks — so a hit inside a long heredoc shows its
@@ -292,9 +375,11 @@ lines that are not part of that value. The same rule decides a `⚙` inside a di
 value — transcripts do quote this tool's own output — so a second call opening
 there is read as content instead, a shape that is rare in practice.
 
-The scan is a plain linear read, with no index to build or keep fresh. Expect a
-couple of seconds on a large corpus — one 528 MB / 1,465-file transcript root
-measured ~1.4 s — dominated by reading the lines rather than by matching.
+The scan is a plain linear read, with no index to build or keep fresh, costing
+very roughly a second per 300 MB of transcript — dominated by reading the lines
+rather than by matching, and on the same order for either source. Both roots are
+scanned by default, so the wait follows their combined size; `--source` narrows
+it to the corpus you actually mean.
 
 ## Requirements
 
