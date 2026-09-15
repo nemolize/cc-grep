@@ -22,17 +22,21 @@ function str(value: unknown): string | undefined {
 }
 
 /**
- * Any `thread_source` but `"user"` names a spawning mechanism, so it maps onto
- * the distinction Claude draws with `isSidechain`.
+ * Only the first names the thread, because a rollout carries its parent's or
+ * ancestors' meta below its own and last-wins hid the file's own id.
  */
-function readSessionMeta(payload: Record<string, unknown>): CodexFileState {
+function applySessionMeta(
+  payload: Record<string, unknown>,
+  state: CodexFileState,
+): void {
+  const cwd = str(payload["cwd"]);
+  if (cwd !== undefined) state.cwd = cwd;
+  if (state.sessionId !== undefined) return;
+
   const threadSource = str(payload["thread_source"]);
-  return {
-    sessionId: str(payload["session_id"]) ?? str(payload["id"]),
-    threadId: str(payload["id"]),
-    cwd: str(payload["cwd"]),
-    isSubagent: threadSource !== undefined && threadSource !== "user",
-  };
+  state.sessionId = str(payload["session_id"]) ?? str(payload["id"]);
+  state.threadId = str(payload["id"]);
+  state.isSubagent = threadSource !== undefined && threadSource !== "user";
 }
 
 /**
@@ -48,7 +52,8 @@ function readRole(
 }
 
 function collectMessageText(content: unknown): string[] {
-  if (typeof content === "string") return content.split("\n");
+  if (typeof content === "string")
+    return content === "" ? [] : content.split("\n");
   if (!Array.isArray(content)) return [];
   const out: string[] = [];
   for (const block of content) {
@@ -74,9 +79,58 @@ function readToolCall(
   const textLines: string[] = [];
   if (name !== "") textLines.push(`${TOOL_MARK} ${name}`);
   if (args !== undefined) textLines.push(...args.split("\n"));
-  if (textLines.length === 0) return undefined;
 
   return { toolCall: { name, paths: [] }, textLines };
+}
+
+/**
+ * Read separately because a search call keeps its query in a shape of its own —
+ * `action.queries` for the web, `arguments.query` for a tool lookup — not `input`.
+ */
+function readSearchCall(
+  payload: Record<string, unknown>,
+): { toolCall: ToolCall; textLines: string[] } | undefined {
+  const name = str(payload["type"]) ?? "";
+  const queries: string[] = [];
+
+  const action = payload["action"];
+  if (isRecord(action)) {
+    const list = action["queries"];
+    if (Array.isArray(list)) {
+      for (const q of list) {
+        if (typeof q === "string" && q !== "") queries.push(q);
+      }
+    }
+    const one = str(action["query"]);
+    if (one !== undefined) queries.push(one);
+  }
+  const args = payload["arguments"];
+  if (isRecord(args)) {
+    const one = str(args["query"]);
+    if (one !== undefined) queries.push(one);
+  }
+  if (queries.length === 0) return undefined;
+
+  return {
+    toolCall: { name, paths: [] },
+    textLines: [`${TOOL_MARK} ${name}`, ...queries],
+  };
+}
+
+/**
+ * Only the summary is read because the reasoning body sits in
+ * `encrypted_content`; older rollouts are the ones carrying a summary at all.
+ */
+function readReasoning(payload: Record<string, unknown>): string[] {
+  const summary = payload["summary"];
+  if (!Array.isArray(summary)) return [];
+  const out: string[] = [];
+  for (const block of summary) {
+    if (!isRecord(block)) continue;
+    const text = block["text"];
+    if (typeof text === "string" && text !== "") out.push(...text.split("\n"));
+  }
+  return out;
 }
 
 function readToolOutput(payload: Record<string, unknown>): string[] {
@@ -109,7 +163,7 @@ export function parseCodexLine(
 
   const lineType = parsed["type"];
   if (lineType === "session_meta") {
-    Object.assign(state, readSessionMeta(payload));
+    applySessionMeta(payload, state);
     return undefined;
   }
   if (lineType === "turn_context") {
@@ -147,6 +201,22 @@ export function parseCodexLine(
       isMeta = false;
       textLines = call.textLines;
       toolCalls = [call.toolCall];
+      break;
+    }
+    case "web_search_call":
+    case "tool_search_call": {
+      const call = readSearchCall(payload);
+      if (call === undefined) return undefined;
+      role = "assistant";
+      isMeta = false;
+      textLines = call.textLines;
+      toolCalls = [call.toolCall];
+      break;
+    }
+    case "reasoning": {
+      role = "assistant";
+      isMeta = false;
+      textLines = readReasoning(payload);
       break;
     }
     case "custom_tool_call_output":

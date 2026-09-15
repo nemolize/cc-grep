@@ -3,7 +3,13 @@ import { buildMatcher } from "./matcher.js";
 import { resumeCommandFor } from "./source.js";
 import { TOOL_MARK } from "./textExtract.js";
 import { decorateToolLines } from "./toolRender.js";
-import type { ColorMode, Hit, Options, Turn } from "./types.js";
+import type {
+  ColorMode,
+  Hit,
+  Options,
+  TranscriptSource,
+  Turn,
+} from "./types.js";
 
 const RESET = "\x1b[0m";
 const BOLD_RED = "\x1b[1;31m";
@@ -36,9 +42,16 @@ export function formatTimestamp(ms: number | undefined): string {
   );
 }
 
-function shortSession(id: string | undefined): string {
+/**
+ * Codex ids lead with a timestamp (UUIDv7), so sessions made close together
+ * share 8 chars; Claude's stays at 8, the width its output already shows.
+ */
+function shortSession(
+  id: string | undefined,
+  source: TranscriptSource,
+): string {
   if (id === undefined || id === "") return "?";
-  return id.slice(0, 8);
+  return id.slice(0, source === "codex" ? 18 : 8);
 }
 
 /**
@@ -52,7 +65,7 @@ export const SUBAGENT_MARK = "▸sub";
  * back into `--session`, and a marker inside that token matches no session.
  */
 function sessionField(turn: Turn): string {
-  const id = shortSession(turn.sessionId);
+  const id = shortSession(turn.sessionId, turn.source);
   return turn.isSidechain ? `${id} ${SUBAGENT_MARK}` : id;
 }
 
@@ -60,8 +73,8 @@ function sessionField(turn: Turn): string {
  * Claude stays unmarked because its output is what every existing eye and
  * script already reads; only the newer source needs telling apart.
  */
-function sourceField(turn: Turn): string {
-  return turn.source === "codex" ? "codex  " : "";
+function sourceLabel(source: TranscriptSource): string {
+  return source === "codex" ? "codex  " : "";
 }
 
 function cyan(text: string, color: boolean): string {
@@ -148,7 +161,7 @@ export function formatHit(
   const headerText = (suffix: string) =>
     cyan(
       `${shortenPath(turn.cwd, home)}  ${formatTimestamp(turn.timestampMs)}  ` +
-        `${sourceField(turn)}${sessionField(turn)}  ${turn.role}` +
+        `${sourceLabel(turn.source)}${sessionField(turn)}  ${turn.role}` +
         `${summary.text}${suffix}`,
       color,
     );
@@ -212,6 +225,7 @@ export function formatHit(
  * form headers use, so the line pastes straight into `--session`.
  */
 export function formatSessionLine(
+  source: TranscriptSource,
   sessionId: string | undefined,
   cwd: string | undefined,
   hits: number,
@@ -221,7 +235,7 @@ export function formatSessionLine(
   const id = sessionId === undefined || sessionId === "" ? "?" : sessionId;
   const unit = hits === 1 ? "hit " : "hits";
   return (
-    cyan(id, color) +
+    cyan(sourceLabel(source) + id, color) +
     `  ${String(hits).padStart(4)} ${unit}  ${shortenPath(cwd, home)}`
   );
 }
@@ -236,7 +250,7 @@ export function formatDumpBanner(
   color: boolean,
 ): string {
   return cyan(
-    `${sourceField(turn)}session ${turn.sessionId ?? "?"}  ` +
+    `${sourceLabel(turn.source)}session ${turn.sessionId ?? "?"}  ` +
       shortenPath(turn.cwd, home) +
       (turn.gitBranch === undefined ? "" : `  (${turn.gitBranch})`),
     color,
@@ -301,10 +315,15 @@ export function formatHitJson(hit: Hit, opts: Options, home: string): string {
     gitBranch: turn.gitBranch,
     isMeta: turn.isMeta,
     isSubagent: turn.isSidechain,
-    // Naming the parent again spares a consumer the "is this the parent or the
-    // agent?" question about `sessionId`.
+    // Names the parent again so `sessionId` needs no interpretation, but not
+    // when they match: a rollout recording no parent would claim to be its own.
     ...(turn.isSidechain
-      ? { agentId: turn.agentId, parentSessionId: turn.sessionId }
+      ? {
+          agentId: turn.agentId,
+          ...(turn.sessionId === turn.agentId
+            ? {}
+            : { parentSessionId: turn.sessionId }),
+        }
       : {}),
     ...(turn.toolCalls.length > 0 ? { toolCalls: turn.toolCalls } : {}),
     matchedLines: everyLineMatched

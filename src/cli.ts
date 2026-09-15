@@ -17,7 +17,7 @@ import {
 import { isRecord } from "./guards.js";
 import { isReadableDir } from "./loader.js";
 import { search } from "./search.js";
-import type { Hit, Options, TranscriptSource } from "./types.js";
+import type { Hit, Options, ResolvedRoot, TranscriptSource } from "./types.js";
 
 /** Read at runtime rather than hardcoded: a literal drifts from package.json on release. */
 function readVersion(): string {
@@ -55,6 +55,19 @@ async function writeStdout(chunk: string): Promise<void> {
   }
 }
 
+function unreadableRootsMessage(roots: ResolvedRoot[]): string {
+  const listed = roots
+    .map(({ path, namedBy }) =>
+      namedBy === undefined ? `"${path}"` : `"${path}" (${namedBy})`,
+    )
+    .join(", ");
+  const verb =
+    roots.length > 1
+      ? "are not readable directories"
+      : "is not a readable directory";
+  return `cc-grep: no transcripts found — ${listed} ${verb}\n`;
+}
+
 async function main(): Promise<number> {
   installEpipeGuard();
   const home = homedir();
@@ -74,25 +87,47 @@ async function main(): Promise<number> {
 
   const requested = parsed.options;
 
-  // A machine with only one agent installed is the normal case, so a missing
-  // root is dropped silently and only an empty result is an error.
-  const readableRoots = new Map<TranscriptSource, string>();
+  // A machine with only one agent installed is the normal case, so a defaulted
+  // root is dropped silently — but a root the user named is theirs to fix.
+  const readableRoots = new Map<TranscriptSource, ResolvedRoot>();
+  const missingExplicit: ResolvedRoot[] = [];
   for (const [source, root] of requested.roots) {
-    if (await isReadableDir(root)) readableRoots.set(source, root);
+    if (await isReadableDir(root.path)) {
+      readableRoots.set(source, root);
+    } else if (root.namedBy !== undefined) {
+      missingExplicit.push(root);
+    }
+  }
+  const ROOT_HINT =
+    `Set --root / --codex-root, or CC_GREP_ROOT / CC_GREP_CODEX_ROOT, if your ` +
+    `transcripts live elsewhere.\n`;
+  if (missingExplicit.length > 0) {
+    process.stderr.write(unreadableRootsMessage(missingExplicit) + ROOT_HINT);
+    return 1;
   }
   if (readableRoots.size === 0) {
-    const listed = [...requested.roots.values()]
-      .map((r) => `"${r}"`)
-      .join(", ");
     process.stderr.write(
-      `cc-grep: no transcripts found — ${listed} ` +
-        `${requested.roots.size > 1 ? "are" : "is"} not a readable directory\n` +
-        `Set --root, CC_GREP_ROOT or CC_GREP_CODEX_ROOT if your transcripts ` +
-        `live elsewhere.\n`,
+      unreadableRootsMessage([...requested.roots.values()]) + ROOT_HINT,
     );
     return 1;
   }
   const opts: Options = { ...requested, roots: readableRoots };
+
+  // Only these two, because Codex cannot answer them at all; `--tool` is a real
+  // filter there under a Codex tool name (`exec`), so it needs no notice.
+  if (readableRoots.has("codex")) {
+    const claudeOnly = [
+      opts.file === undefined ? undefined : "--file",
+      opts.branch === undefined ? undefined : "--branch",
+    ].filter((f) => f !== undefined);
+    if (claudeOnly.length > 0) {
+      const verb = claudeOnly.length > 1 ? "match" : "matches";
+      process.stderr.write(
+        `cc-grep: ${claudeOnly.join(" and ")} ${verb} no Codex turn, so this ` +
+          `searched Claude only\n`,
+      );
+    }
+  }
 
   // Typed `boolean`, but Node leaves it `undefined` when stdout is not a TTY.
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-boolean-literal-compare
@@ -103,11 +138,16 @@ async function main(): Promise<number> {
   const resumeLines: string[] = [];
   const dumping = opts.session !== undefined;
   const dumpedSessions = new Set<string>();
-  // Keyed by file for a turn with no session id: those rows are unrelated to
-  // each other, and a shared "?" key would merge them into one fake session.
+  // Keyed by source and file as well as id: a shared "?" would merge unrelated
+  // sessionless turns, and the two agents' id spaces overlap in form.
   const sessionTally = new Map<
     string,
-    { sessionId?: string | undefined; cwd?: string | undefined; hits: number }
+    {
+      source: TranscriptSource;
+      sessionId?: string | undefined;
+      cwd?: string | undefined;
+      hits: number;
+    }
   >();
 
   try {
@@ -117,15 +157,17 @@ async function main(): Promise<number> {
 
       // Tracked for every output format: the ambiguity warning is as useful to
       // a `--json` consumer, which would otherwise silently mix two sessions.
-      const newSession =
-        dumping && !dumpedSessions.has(hit.turn.sessionId ?? "?");
-      if (newSession) dumpedSessions.add(hit.turn.sessionId ?? "?");
+      const dumpKey = `${hit.turn.source}\0${hit.turn.sessionId ?? "?"}`;
+      const newSession = dumping && !dumpedSessions.has(dumpKey);
+      if (newSession) dumpedSessions.add(dumpKey);
 
       if (opts.summary === "sessions") {
-        const key = hit.turn.sessionId ?? `\0${hit.turn.file}`;
+        const key =
+          hit.turn.source + "\0" + (hit.turn.sessionId ?? `\0${hit.turn.file}`);
         const seen = sessionTally.get(key);
         if (seen === undefined) {
           sessionTally.set(key, {
+            source: hit.turn.source,
             sessionId: hit.turn.sessionId,
             cwd: hit.turn.cwd,
             hits: 1,
@@ -209,11 +251,12 @@ async function main(): Promise<number> {
     // Ranked, not discovery order: the point of a survey is which sessions to
     // read first.
     const ranked = [...sessionTally.values()].sort((a, b) => b.hits - a.hits);
-    for (const { sessionId, cwd, hits } of ranked) {
+    for (const { source, sessionId, cwd, hits } of ranked) {
       await writeStdout(
         (opts.json
-          ? JSON.stringify({ sessionId, hits, cwd })
-          : formatSessionLine(sessionId, cwd, hits, home, color)) + "\n",
+          ? JSON.stringify({ source, sessionId, hits, cwd })
+          : formatSessionLine(source, sessionId, cwd, hits, home, color)) +
+          "\n",
       );
     }
   }

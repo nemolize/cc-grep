@@ -151,6 +151,118 @@ test("tool output is searchable and attributed to the side that received it", as
   );
 });
 
+// Worth extracting because the query is the only plaintext such a record
+// carries, and what a session searched for is what a later search asks about.
+test("a web search call contributes its queries", async () => {
+  await withCodexFile(
+    [
+      meta(),
+      JSON.stringify({
+        timestamp: "2026-09-14T04:03:00.000Z",
+        type: "response_item",
+        payload: {
+          type: "web_search_call",
+          status: "completed",
+          action: { type: "search", queries: ["needle release notes"] },
+        },
+      }),
+    ],
+    (turns) => {
+      expect(turns[0].role).toBe("assistant");
+      expect(turns[0].textLines[1]).toBe("needle release notes");
+      expect(turns[0].toolCalls).toEqual([
+        { name: "web_search_call", paths: [] },
+      ]);
+    },
+  );
+});
+
+test("a tool search call contributes its query", async () => {
+  await withCodexFile(
+    [
+      meta(),
+      JSON.stringify({
+        timestamp: "2026-09-14T04:04:00.000Z",
+        type: "response_item",
+        payload: {
+          type: "tool_search_call",
+          arguments: { query: "serena initial_instructions", limit: 1 },
+        },
+      }),
+    ],
+    (turns) => {
+      expect(turns[0].textLines[1]).toBe("serena initial_instructions");
+    },
+  );
+});
+
+test("a search call with no query yields no turn", async () => {
+  await withCodexFile(
+    [
+      meta(),
+      JSON.stringify({
+        timestamp: "2026-09-14T04:05:00.000Z",
+        type: "response_item",
+        payload: { type: "web_search_call", action: { type: "search" } },
+      }),
+    ],
+    (turns) => {
+      expect(turns).toEqual([]);
+    },
+  );
+});
+
+// Old rollouts put a one-line summary beside the encrypted body; current ones
+// carry an empty array, which must not become a blank turn.
+test("reasoning contributes its plaintext summary, and nothing when empty", async () => {
+  await withCodexFile(
+    [
+      meta(),
+      JSON.stringify({
+        timestamp: "2026-09-14T04:06:00.000Z",
+        type: "response_item",
+        payload: {
+          type: "reasoning",
+          summary: [{ type: "summary_text", text: "**Reading the needle**" }],
+          encrypted_content: "opaque",
+        },
+      }),
+      JSON.stringify({
+        timestamp: "2026-09-14T04:07:00.000Z",
+        type: "response_item",
+        payload: {
+          type: "reasoning",
+          summary: [],
+          encrypted_content: "opaque",
+        },
+      }),
+    ],
+    (turns) => {
+      expect(turns.length).toBe(1);
+      expect(turns[0].role).toBe("assistant");
+      expect(turns[0].textLines).toEqual(["**Reading the needle**"]);
+    },
+  );
+});
+
+// A blank turn renders as a bare `>>` and matches an empty pattern, so every
+// reader in this file drops empty text rather than passing one line of nothing.
+test("a message whose content is an empty string yields no turn", async () => {
+  await withCodexFile(
+    [
+      meta(),
+      JSON.stringify({
+        timestamp: "2026-09-14T04:08:00.000Z",
+        type: "response_item",
+        payload: { type: "message", role: "user", content: "" },
+      }),
+    ],
+    (turns) => {
+      expect(turns).toEqual([]);
+    },
+  );
+});
+
 test("bookkeeping records yield no turns", async () => {
   await withCodexFile(
     [
@@ -181,6 +293,38 @@ test("a prefilter still lets metadata through, so a surviving hit keeps its cwd"
       expect(turns[0].sessionId).toBe("parent-1");
     },
     prefilter,
+  );
+});
+
+// Some Codex rollouts carry an ancestor's session_meta below their own, so
+// last-wins answered --session with an id the file is not named for.
+test("a resumed rollout keeps the id of its own thread, not its ancestor's", async () => {
+  await withCodexFile(
+    [
+      meta({ session_id: "own-1", id: "own-1" }),
+      message("user", "after the resume"),
+      meta({ session_id: "ancestor-1", id: "ancestor-1", cwd: "/older" }),
+      message("user", "replayed from the ancestor"),
+    ],
+    (turns) => {
+      expect(turns.map((t) => t.sessionId)).toEqual(["own-1", "own-1"]);
+      expect(turns.map((t) => t.agentId)).toEqual([undefined, undefined]);
+      expect(turns.map((t) => t.cwd)).toEqual(["/proj-a", "/older"]);
+    },
+  );
+});
+
+test("a replayed ancestor cannot flip the thread to subagent", async () => {
+  await withCodexFile(
+    [
+      meta({ session_id: "own-2", id: "own-2" }),
+      meta({ thread_source: "subagent", session_id: "p", id: "sub" }),
+      message("user", "still the user's thread"),
+    ],
+    (turns) => {
+      expect(turns[0].isSidechain).toBe(false);
+      expect(turns[0].sessionId).toBe("own-2");
+    },
   );
 });
 

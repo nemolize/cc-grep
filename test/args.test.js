@@ -220,7 +220,7 @@ test.each([
 });
 
 test.each([
-  ["--root", "-", (o) => o.roots.get("claude")],
+  ["--root", "-", (o) => o.roots.get("claude")?.path],
   ["--cwd", "-generated", (o) => o.cwd],
   ["--branch", "-wip", (o) => o.branch],
 ])("%s accepts an inline dash-prefixed value", (option, value, read) => {
@@ -248,19 +248,21 @@ test("extra positional argument errors", () => {
 test("CC_GREP_ROOT overrides default root", () => {
   const r = parse(["p"], { CC_GREP_ROOT: "/custom" });
   if (r.kind === "options")
-    expect(r.options.roots.get("claude")).toBe("/custom");
+    expect(r.options.roots.get("claude")?.path).toBe("/custom");
 });
 
 test("default root falls back to ~/.claude/projects", () => {
   const r = parse(["p"]);
   if (r.kind === "options")
-    expect(r.options.roots.get("claude")).toBe("/home/u/.claude/projects");
+    expect(r.options.roots.get("claude")?.path).toBe(
+      "/home/u/.claude/projects",
+    );
 });
 
 test("--root explicit beats env", () => {
   const r = parse(["p", "--root", "/explicit"], { CC_GREP_ROOT: "/env" });
   if (r.kind === "options")
-    expect(r.options.roots.get("claude")).toBe("/explicit");
+    expect(r.options.roots.get("claude")?.path).toBe("/explicit");
 });
 
 test("--session makes the pattern optional", () => {
@@ -372,4 +374,94 @@ test("tools and file are undefined without their flags", () => {
 test("help documents --tool and --file", () => {
   expect(HELP).toMatch(/--tool <name\[,name\.\.\.\]>/);
   expect(HELP).toMatch(/--file <substring>/);
+});
+
+test("--source defaults to both, each with its own root", () => {
+  const r = parse(["p"]);
+  if (r.kind === "options") {
+    expect([...r.options.roots.keys()].sort()).toEqual(["claude", "codex"]);
+    expect(r.options.roots.get("claude")?.path).toBe(
+      "/home/u/.claude/projects",
+    );
+    expect(r.options.roots.get("codex")?.path).toBe("/home/u/.codex/sessions");
+  }
+});
+
+test("--source codex scans only the codex root", () => {
+  const r = parse(["p", "--source", "codex"]);
+  if (r.kind === "options") {
+    expect([...r.options.roots.keys()]).toEqual(["codex"]);
+  }
+});
+
+test("--source claude scans only the claude root", () => {
+  const r = parse(["p", "--source", "claude"]);
+  if (r.kind === "options") {
+    expect([...r.options.roots.keys()]).toEqual(["claude"]);
+  }
+});
+
+test("--source rejects an unknown value", () => {
+  const r = parse(["p", "--source", "gemini"]);
+  expect(r.kind).toBe("error");
+  if (r.kind === "error") expect(r.message).toContain("claude|codex|both");
+});
+
+// Pins the compat guarantee: a script written before Codex support passes
+// --root and must keep getting exactly the Claude tree it named.
+test("--root names Claude's root whatever --source says", () => {
+  const bare = parse(["p", "--root", "/custom"]);
+  if (bare.kind === "options") {
+    expect(bare.options.roots.get("claude")).toEqual({
+      path: "/custom",
+      namedBy: "--root",
+    });
+    expect(bare.options.roots.get("codex")?.path).toBe(
+      "/home/u/.codex/sessions",
+    );
+  }
+
+  const scoped = parse(["p", "--source", "claude", "--root", "/custom"]);
+  if (scoped.kind === "options") {
+    expect([...scoped.options.roots.keys()]).toEqual(["claude"]);
+  }
+});
+
+test("--codex-root names Codex's, and the two compose", () => {
+  const r = parse(["p", "--root", "/cl", "--codex-root", "/cx"]);
+  if (r.kind === "options") {
+    expect([...r.options.roots.entries()].sort()).toEqual([
+      ["claude", { path: "/cl", namedBy: "--root" }],
+      ["codex", { path: "/cx", namedBy: "--codex-root" }],
+    ]);
+  }
+});
+
+test("--codex-root is ignored when --source excludes codex", () => {
+  const r = parse(["p", "--source", "claude", "--codex-root", "/cx"]);
+  if (r.kind === "options") {
+    expect([...r.options.roots.keys()]).toEqual(["claude"]);
+  }
+});
+
+test("an env-supplied root is marked explicit; a defaulted one is not", () => {
+  const r = parse(["p"], { CC_GREP_CODEX_ROOT: "/cx" });
+  if (r.kind === "options") {
+    expect(r.options.roots.get("codex")).toEqual({
+      path: "/cx",
+      namedBy: "CC_GREP_CODEX_ROOT",
+    });
+    expect(r.options.roots.get("claude")?.namedBy).toBe(undefined);
+  }
+});
+
+test("--root marks the source it pins as explicit", () => {
+  const r = parse(["p", "--root", "/custom"]);
+  if (r.kind === "options") {
+    expect(r.options.roots.get("claude")?.namedBy).toBe("--root");
+  }
+});
+
+test("help documents --source", () => {
+  expect(HELP).toMatch(/--source <claude\|codex\|both>/);
 });

@@ -1,7 +1,7 @@
 import { parseArgs as parseNodeArgs } from "node:util";
 
 import { parseSinceUntil } from "./duration.js";
-import { ALL_SOURCES, sourceRoot } from "./source.js";
+import { ALL_SOURCES, resolveRoots } from "./source.js";
 import type {
   ColorMode,
   Options,
@@ -27,11 +27,12 @@ Pattern:
 Scope:
   --source <claude|codex|both>
                        Which agent's transcripts to search (default: both;
-                       a root that does not exist is skipped silently)
-  --root <path>        Transcript root; with --source it pins that one source,
-                       otherwise it pins Claude's
-                       (defaults: $CC_GREP_ROOT or ~/.claude/projects,
-                        $CC_GREP_CODEX_ROOT or ~/.codex/sessions)
+                       an unreadable root nobody named is skipped, while one
+                       named by a flag or env var below is an error)
+  --root <path>        Claude's transcript root
+                       (else $CC_GREP_ROOT, else ~/.claude/projects)
+  --codex-root <path>  Codex's transcript root
+                       (else $CC_GREP_CODEX_ROOT, else ~/.codex/sessions)
   Dash-prefixed option values require --option=value (e.g. --cwd=-generated).
 
 Filters:
@@ -90,6 +91,7 @@ const ARG_OPTIONS = {
   fixed: { type: "boolean", short: "F" },
   "ignore-case": { type: "boolean", short: "i" },
   root: { type: "string" },
+  "codex-root": { type: "string" },
   source: { type: "string" },
   session: { type: "string" },
   role: { type: "string" },
@@ -330,16 +332,11 @@ export function parseArgs(
   const sources: readonly TranscriptSource[] =
     explicitSource === undefined ? ALL_SOURCES : [explicitSource];
 
-  // Narrowed to one source because reading one tree under both schemas would
-  // report each turn twice; bare `--root` still means Claude's, as it always did.
-  const rootedSources: readonly TranscriptSource[] =
-    values.root === undefined ? sources : [explicitSource ?? "claude"];
-
-  const roots = new Map<TranscriptSource, string>(
-    rootedSources.map((source) => [
-      source,
-      values.root ?? sourceRoot(source, env, home),
-    ]),
+  const roots = resolveRoots(
+    sources,
+    { claude: values.root, codex: values["codex-root"] },
+    env,
+    home,
   );
 
   const colorValue = values.color;

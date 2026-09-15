@@ -1,5 +1,5 @@
-import { createReadStream } from "node:fs";
-import { readdir, stat } from "node:fs/promises";
+import { constants, createReadStream } from "node:fs";
+import { access, readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 
@@ -43,9 +43,9 @@ export async function* findTranscripts(root: string): AsyncGenerator<string> {
 }
 
 /**
- * Parse one transcript file into normalized turns. Only `user`/`assistant`
- * lines carry searchable text; other line types (summary, queue-operation, …)
- * are skipped. Malformed JSON lines are skipped silently — never throw.
+ * Parse one transcript file into normalized turns. `source` selects the parser,
+ * since the two agents share no schema; a line carrying no searchable text, and
+ * a malformed one, are both skipped silently — never throw.
  *
  * `prefilter` may drop a raw line before it is parsed, which is what keeps a
  * rare term from costing a full-corpus parse. It must be a superset of the
@@ -152,10 +152,15 @@ function parseClaudeLine(
   };
 }
 
-/** True if `path` exists and is a directory. */
+/**
+ * Readability is checked, not just existence, because `findTranscripts` swallows
+ * the `EACCES` a locked-down directory raises and would report it as no hits.
+ */
 export async function isReadableDir(path: string): Promise<boolean> {
   try {
-    return (await stat(path)).isDirectory();
+    if (!(await stat(path)).isDirectory()) return false;
+    await access(path, constants.R_OK | constants.X_OK);
+    return true;
   } catch {
     return false;
   }

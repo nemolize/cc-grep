@@ -17,7 +17,7 @@ export async function* search(opts: Options): AsyncGenerator<Hit> {
   let yielded = 0;
 
   for (const [source, root] of opts.roots) {
-    for await (const file of findTranscripts(root)) {
+    for await (const file of findTranscripts(root.path)) {
       for await (const turn of loadTurns(file, prefilter, source)) {
         if (!passesFilters(turn, opts)) continue;
 

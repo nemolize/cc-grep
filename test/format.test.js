@@ -40,6 +40,7 @@ function hit(over) {
     turn: {
       file: "/x.jsonl",
       lineIndex: 3,
+      source: "claude",
       role: "user",
       sessionId: "abcdef12-3456",
       timestamp: "2026-07-10T21:34:00Z",
@@ -292,6 +293,58 @@ test("the exported mark is the literal the output contract promises", () => {
   expect(SUBAGENT_MARK).toBe("▸sub");
 });
 
+// Codex ids lead with a timestamp, so a Claude-width 8 chars would print a
+// token that matches several sessions when pasted back into --session.
+test("a codex header prints enough of the id to name one session", () => {
+  const h = hit({
+    source: "codex",
+    sessionId: "019f6130-41b1-7411-8742-cbd4d7a584b8",
+  });
+  const header = formatHit(h, opts, "/home/u", false).split("\n")[0];
+  expect(header).toContain("codex  019f6130-41b1-7411  user");
+});
+
+test("a claude header keeps the 8-char id its output has always shown", () => {
+  const header = formatHit(hit(), opts, "/home/u", false).split("\n")[0];
+  expect(header).toContain("abcdef12  user");
+  expect(header).not.toContain("codex");
+});
+
+// Some early Codex rollouts record no parent on a subagent thread, so sessionId
+// falls back to the thread's own id and the alias would lie.
+test("a subagent with no recorded parent omits parentSessionId rather than self-naming", () => {
+  const h = hit({
+    source: "codex",
+    isSidechain: true,
+    sessionId: "same-id",
+    agentId: "same-id",
+  });
+  const obj = JSON.parse(formatHitJson(h, jsonOpts, "/home/u"));
+  expect(obj.agentId).toBe("same-id");
+  expect("parentSessionId" in obj).toBe(false);
+});
+
+test("a subagent with a real parent still names it", () => {
+  const h = hit({
+    source: "codex",
+    isSidechain: true,
+    sessionId: "parent-id",
+    agentId: "thread-id",
+  });
+  const obj = JSON.parse(formatHitJson(h, jsonOpts, "/home/u"));
+  expect(obj.parentSessionId).toBe("parent-id");
+  expect(obj.agentId).toBe("thread-id");
+});
+
+test("the session line carries the source marker for codex only", () => {
+  expect(formatSessionLine("codex", "cx-1", "/p", 1, "/home/u", false)).toMatch(
+    /^codex {2}cx-1/,
+  );
+  expect(
+    formatSessionLine("claude", "cl-1", "/p", 1, "/home/u", false),
+  ).toMatch(/^cl-1/);
+});
+
 test("a subagent hit is marked on the header, a main-thread one is not", () => {
   const main = formatHit(hit(), opts, "/home/u", false).split("\n")[0];
   expect(main).toContain("abcdef12  user");
@@ -516,7 +569,14 @@ test("prose does not borrow an earlier call's tool header", () => {
 
 test("formatSessionLine prints the full id so it pastes into --session", () => {
   const t = hit().turn;
-  const out = formatSessionLine(t.sessionId, t.cwd, 3, "/home/u", false);
+  const out = formatSessionLine(
+    "claude",
+    t.sessionId,
+    t.cwd,
+    3,
+    "/home/u",
+    false,
+  );
   expect(out).toContain(t.sessionId);
   expect(out).toContain("~/proj");
   expect(out).toContain("3 hits");
@@ -524,12 +584,19 @@ test("formatSessionLine prints the full id so it pastes into --session", () => {
 
 test("formatSessionLine singularises a lone hit", () => {
   const t = hit().turn;
-  expect(formatSessionLine(t.sessionId, t.cwd, 1, "/home/u", false)).toContain(
-    "1 hit ",
-  );
+  expect(
+    formatSessionLine("claude", t.sessionId, t.cwd, 1, "/home/u", false),
+  ).toContain("1 hit ");
 });
 
 test("formatSessionLine tolerates a missing session id and cwd", () => {
-  const out = formatSessionLine(undefined, undefined, 2, "/home/u", false);
+  const out = formatSessionLine(
+    "claude",
+    undefined,
+    undefined,
+    2,
+    "/home/u",
+    false,
+  );
   expect(out).toContain("?");
 });
