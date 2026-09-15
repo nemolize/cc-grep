@@ -7,6 +7,7 @@ import { expect, test } from "vitest";
 import { loadTurns } from "../src/loader.js";
 import { buildPrefilter } from "../src/prefilter.js";
 import { resumeCommandFor } from "../src/source.js";
+import { TOOL_MARK } from "../src/textExtract.js";
 
 function meta(over = {}) {
   return JSON.stringify({
@@ -259,6 +260,185 @@ test("a message whose content is an empty string yields no turn", async () => {
     ],
     (turns) => {
       expect(turns).toEqual([]);
+    },
+  );
+});
+
+// An `agent_message` is how a spawned agent reports back, so it carries the
+// handoff text a search for "what did that subagent conclude" needs.
+test("an agent_message is an assistant turn", async () => {
+  await withCodexFile(
+    [
+      meta(),
+      JSON.stringify({
+        timestamp: "2026-09-14T04:09:00.000Z",
+        type: "response_item",
+        payload: {
+          type: "agent_message",
+          author: "/root",
+          content: [{ type: "input_text", text: "the needle, reported back" }],
+        },
+      }),
+    ],
+    (turns) => {
+      expect(turns[0].role).toBe("assistant");
+      expect(turns[0].textLines).toEqual(["the needle, reported back"]);
+    },
+  );
+});
+
+test("a message in an unknown role yields no turn", async () => {
+  await withCodexFile(
+    [meta(), message("system", "neither party said this")],
+    (turns) => {
+      expect(turns).toEqual([]);
+    },
+  );
+});
+
+test("an unrecognised response_item type yields no turn", async () => {
+  await withCodexFile(
+    [
+      meta(),
+      JSON.stringify({
+        timestamp: "2026-09-14T04:10:00.000Z",
+        type: "response_item",
+        payload: { type: "some_future_shape", text: "not read" },
+      }),
+    ],
+    (turns) => {
+      expect(turns).toEqual([]);
+    },
+  );
+});
+
+// The schema is undocumented and drifts, so every reader has to survive a
+// shape it did not expect rather than throwing mid-scan.
+test.each([
+  [
+    "content is not an array or string",
+    { type: "message", role: "user", content: 42 },
+  ],
+  [
+    "a content block is not an object",
+    { type: "message", role: "user", content: ["raw"] },
+  ],
+  [
+    "a content block has no text",
+    { type: "message", role: "user", content: [{ type: "image" }] },
+  ],
+  ["a tool call has neither name nor arguments", { type: "custom_tool_call" }],
+  [
+    "a search call's queries are not strings",
+    { type: "web_search_call", action: { queries: [1, 2] } },
+  ],
+  [
+    "reasoning's summary is not an array",
+    { type: "reasoning", summary: "opaque" },
+  ],
+  [
+    "a reasoning block is not an object",
+    { type: "reasoning", summary: ["raw"] },
+  ],
+  [
+    "a reasoning block has no text",
+    { type: "reasoning", summary: [{ type: "summary_text" }] },
+  ],
+])("a malformed payload yields no turn: %s", async (_label, payload) => {
+  await withCodexFile(
+    [
+      meta(),
+      JSON.stringify({
+        timestamp: "2026-09-14T04:11:00.000Z",
+        type: "response_item",
+        payload,
+      }),
+    ],
+    (turns) => {
+      expect(turns).toEqual([]);
+    },
+  );
+});
+
+// Which tool ran is worth keeping even when its arguments arrive in a shape
+// this cannot read — the name alone still answers `--tool`.
+test("a tool call whose input is not a string keeps the name", async () => {
+  await withCodexFile(
+    [
+      meta(),
+      JSON.stringify({
+        timestamp: "2026-09-14T04:12:00.000Z",
+        type: "response_item",
+        payload: {
+          type: "custom_tool_call",
+          name: "exec",
+          input: { cmd: "x" },
+        },
+      }),
+    ],
+    (turns) => {
+      expect(turns[0].textLines).toEqual([`${TOOL_MARK} exec`]);
+      expect(turns[0].toolCalls).toEqual([{ name: "exec", paths: [] }]);
+    },
+  );
+});
+
+test("a line that is valid JSON but not an object is skipped", async () => {
+  await withCodexFile([meta(), "[1,2,3]", '"a string"'], (turns) => {
+    expect(turns).toEqual([]);
+  });
+});
+
+test("a record with no payload is skipped", async () => {
+  await withCodexFile(
+    [
+      meta(),
+      JSON.stringify({ type: "response_item", payload: "not an object" }),
+    ],
+    (turns) => {
+      expect(turns).toEqual([]);
+    },
+  );
+});
+
+test("a turn with no timestamp still parses, with the field left unset", async () => {
+  await withCodexFile(
+    [
+      meta(),
+      JSON.stringify({
+        type: "response_item",
+        payload: {
+          type: "message",
+          role: "user",
+          content: [{ type: "input_text", text: "undated" }],
+        },
+      }),
+    ],
+    (turns) => {
+      expect(turns[0].textLines).toEqual(["undated"]);
+      expect(turns[0].timestamp).toBe(undefined);
+      expect(turns[0].timestampMs).toBe(undefined);
+    },
+  );
+});
+
+test("an unparseable timestamp leaves timestampMs unset but keeps the raw string", async () => {
+  await withCodexFile(
+    [
+      meta(),
+      JSON.stringify({
+        timestamp: "not a date",
+        type: "response_item",
+        payload: {
+          type: "message",
+          role: "user",
+          content: [{ type: "input_text", text: "misdated" }],
+        },
+      }),
+    ],
+    (turns) => {
+      expect(turns[0].timestamp).toBe("not a date");
+      expect(turns[0].timestampMs).toBe(undefined);
     },
   );
 });
