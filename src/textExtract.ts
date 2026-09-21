@@ -120,9 +120,9 @@ function collectToolUse(
 /**
  * Nested strings are spliced in raw rather than JSON-escaped, so a value's own
  * newlines become real lines while a literal backslash-n in the data stays
- * literal — post-unescaping a serialized blob cannot tell the two apart.
+ * literal. Strings are not recursively parsed as JSON.
  */
-function renderValue(value: unknown, depth: number): string {
+export function renderValue(value: unknown, depth = 0): string {
   if (typeof value === "string") return value;
   if (depth > MAX_DEPTH) return safeStringify(value);
   if (Array.isArray(value)) {

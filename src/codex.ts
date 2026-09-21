@@ -1,5 +1,5 @@
 import { isRecord } from "./guards.js";
-import { TOOL_MARK } from "./textExtract.js";
+import { renderValue, TOOL_MARK } from "./textExtract.js";
 import type { ToolCall, Turn } from "./types.js";
 
 /**
@@ -135,8 +135,16 @@ function readReasoning(payload: Record<string, unknown>): string[] {
 
 function readToolOutput(payload: Record<string, unknown>): string[] {
   const output = payload["output"];
-  if (typeof output === "string")
-    return output === "" ? [] : output.split("\n");
+  if (typeof output === "string") {
+    let text = output;
+    try {
+      const decoded: unknown = JSON.parse(output);
+      text = renderValue(decoded);
+    } catch {
+      // Plain-text tool output needs no decoding.
+    }
+    return text === "" ? [] : text.split("\n");
+  }
   return collectMessageText(output);
 }
 

@@ -237,6 +237,11 @@ two schemas express the same way works identically — the pattern, `--role`,
 `--since` / `--until`, `--cwd`, `--session` dumps, `--subagents`, `-c` / `-l`,
 `--json` (which carries a `source` field), and the resume affordance.
 
+JSON-encoded tool output is decoded once before matching and rendering, so `-C N`
+shows neighbouring output lines. Nested strings retain literal backslash escapes;
+non-JSON output stays verbatim. Patterns match the decoded text rather than its
+JSON escaping or quoted object keys.
+
 Three filters read something Codex records differently, or not at all:
 
 - **`--file` never matches a Codex turn.** Codex passes a tool's arguments as one
