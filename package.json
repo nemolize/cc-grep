@@ -46,7 +46,7 @@
     "lint": "run-p --continue-on-error \"lint:*\"",
     "lint:eslint": "eslint .",
     "lint:knip": "knip",
-    "lint:prettier": "prettier --check .",
+    "lint:prettier": "git ls-files -z | xargs -0 prettier --check --ignore-unknown",
     "lint:typecheck": "run-p --continue-on-error type-check typecheck:node",
     "typecheck:node": "tsc -p tsconfig.node.json --noEmit",
     "fix": "run-s --continue-on-error fix:eslint fix:prettier",
