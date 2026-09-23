@@ -439,10 +439,8 @@ pnpm run test:coverage   # unit tests with a coverage report
 ```
 
 `pnpm run lint` uses `--continue-on-error`, so one failing check does not hide
-the others. Its prettier step checks the files git tracks, so a new file joins
-the check once it is staged; `pnpm run fix` formats everything under the tree.
-Coverage thresholds live in `vitest.config.ts` with `autoUpdate` enabled: they
-rise as coverage improves and never fall on their own.
+the others. Coverage thresholds live in `vitest.config.ts` with `autoUpdate`
+enabled: they rise as coverage improves and never fall on their own.
 
 ### Git hooks
 
