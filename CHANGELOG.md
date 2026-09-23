@@ -1,5 +1,15 @@
 # @nemolize/cc-grep
 
+## 0.7.0
+
+### Minor Changes
+
+- [#128](https://github.com/nemolize/cg/pull/128) [`314f510`](https://github.com/nemolize/cg/commit/314f510972cdbd82051c18393bc1917e1b7999f9) - Rename to `cg` (package `@nemolize/cg`). The command is now `cg`; `cc-grep` stays as an alias. Root overrides are now `CG_ROOT` / `CG_CODEX_ROOT`; the old `CC_GREP_ROOT` / `CC_GREP_CODEX_ROOT` are still read when the new ones are unset.
+
+### Patch Changes
+
+- [#122](https://github.com/nemolize/cg/pull/122) [`aac671c`](https://github.com/nemolize/cg/commit/aac671c1ffe19240fca2ec5e0f73416bd4ced0bb) - Decode JSON-encoded Codex tool output once so search context shows individual output lines.
+
 ## 0.6.0
 
 ### Minor Changes
