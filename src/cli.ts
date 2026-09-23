@@ -33,7 +33,7 @@ function readVersion(): string {
 }
 
 /**
- * Exit quietly when a downstream consumer closes the pipe (`cc-grep foo | head`,
+ * Exit quietly when a downstream consumer closes the pipe (`cg foo | head`,
  * `| less` then `q`). Without this, the next `stdout.write` emits an unhandled
  * EPIPE `error` event and Node crashes with a stack trace.
  */
@@ -65,7 +65,7 @@ function unreadableRootsMessage(roots: ResolvedRoot[]): string {
     roots.length > 1
       ? "are not readable directories"
       : "is not a readable directory";
-  return `cc-grep: no transcripts found — ${listed} ${verb}\n`;
+  return `cg: no transcripts found — ${listed} ${verb}\n`;
 }
 
 async function main(): Promise<number> {
@@ -81,7 +81,7 @@ async function main(): Promise<number> {
       await writeStdout(readVersion() + "\n");
       return 0;
     case "error":
-      process.stderr.write(`cc-grep: ${parsed.message}\n\n${HELP}`);
+      process.stderr.write(`cg: ${parsed.message}\n\n${HELP}`);
       return 2;
   }
 
@@ -99,7 +99,7 @@ async function main(): Promise<number> {
     }
   }
   const ROOT_HINT =
-    `Set --root / --codex-root, or CC_GREP_ROOT / CC_GREP_CODEX_ROOT, if your ` +
+    `Set --root / --codex-root, or CG_ROOT / CG_CODEX_ROOT, if your ` +
     `transcripts live elsewhere.\n`;
   if (missingExplicit.length > 0) {
     process.stderr.write(unreadableRootsMessage(missingExplicit) + ROOT_HINT);
@@ -123,7 +123,7 @@ async function main(): Promise<number> {
     if (claudeOnly.length > 0) {
       const verb = claudeOnly.length > 1 ? "match" : "matches";
       process.stderr.write(
-        `cc-grep: ${claudeOnly.join(" and ")} ${verb} no Codex turn, so this ` +
+        `cg: ${claudeOnly.join(" and ")} ${verb} no Codex turn, so this ` +
           `searched Claude only\n`,
       );
     }
@@ -202,7 +202,7 @@ async function main(): Promise<number> {
   } catch (err) {
     // A matcher-build error (bad regex) surfaces on first use.
     process.stderr.write(
-      `cc-grep: ${err instanceof Error ? err.message : String(err)}\n`,
+      `cg: ${err instanceof Error ? err.message : String(err)}\n`,
     );
     return 2;
   }
@@ -211,14 +211,14 @@ async function main(): Promise<number> {
   // truncated --session dump reads as the whole conversation.
   if (opts.maxCount !== undefined && count >= opts.maxCount) {
     process.stderr.write(
-      `cc-grep: stopped at ${String(opts.maxCount)} (--max-count); ` +
+      `cg: stopped at ${String(opts.maxCount)} (--max-count); ` +
         `more may match\n`,
     );
   }
 
   if (dumping && dumpedSessions.size > 1) {
     process.stderr.write(
-      `cc-grep: "${opts.session ?? ""}" matched ${String(dumpedSessions.size)} sessions — ` +
+      `cg: "${opts.session ?? ""}" matched ${String(dumpedSessions.size)} sessions — ` +
         `pass a longer prefix to dump just one\n`,
     );
   }
@@ -236,7 +236,7 @@ async function main(): Promise<number> {
       opts.file !== undefined ||
       opts.subagents !== undefined;
     process.stderr.write(
-      `cc-grep: no turns for session "${opts.session ?? ""}" — ` +
+      `cg: no turns for session "${opts.session ?? ""}" — ` +
         (narrowed
           ? "check the id, or loosen the pattern/filters\n"
           : "check the id, or try --subagents=include\n"),
@@ -283,7 +283,7 @@ main()
   })
   .catch((err: unknown) => {
     process.stderr.write(
-      `cc-grep: unexpected error: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}\n`,
+      `cg: unexpected error: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}\n`,
     );
     process.exitCode = 2;
   });

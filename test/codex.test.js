@@ -39,7 +39,7 @@ function message(role, text, over = {}) {
 }
 
 async function withCodexFile(lines, fn, prefilter) {
-  const dir = await mkdtemp(join(tmpdir(), "cc-grep-codex-"));
+  const dir = await mkdtemp(join(tmpdir(), "cg-codex-"));
   const file = join(dir, "rollout-2026-09-14T03-54-20-thread-1.jsonl");
   await writeFile(file, lines.join("\n"));
   try {

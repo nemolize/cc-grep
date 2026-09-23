@@ -25,7 +25,7 @@ function opts(root, over) {
 }
 
 async function corpus(fn) {
-  const dir = await mkdtemp(join(tmpdir(), "cc-grep-search-"));
+  const dir = await mkdtemp(join(tmpdir(), "cg-search-"));
   const line = (o) => JSON.stringify(o);
   await writeFile(
     join(dir, "s.jsonl"),
@@ -130,7 +130,7 @@ test("--session composes with --role", async () => {
 // A subagent transcript lives beside the session's own file and carries the
 // PARENT's sessionId, so a dump would splice it into the conversation.
 async function corpusWithSubagent(fn) {
-  const dir = await mkdtemp(join(tmpdir(), "cc-grep-sidechain-"));
+  const dir = await mkdtemp(join(tmpdir(), "cg-sidechain-"));
   const line = (o) => JSON.stringify(o);
   await writeFile(
     join(dir, "s.jsonl"),
@@ -212,7 +212,7 @@ test("empty root yields no hits, no throw", async () => {
 
 /** Three sessions that all involve `rules/x.md`; only one called a tool on it. */
 async function corpusTouchingOneFile(fn) {
-  const dir = await mkdtemp(join(tmpdir(), "cc-grep-tool-"));
+  const dir = await mkdtemp(join(tmpdir(), "cg-tool-"));
   const line = (o) => JSON.stringify(o);
   const toolUse = (name, input) => ({
     type: "assistant",
@@ -263,7 +263,7 @@ test("--tool + --file finds the session that targeted a file, not the ones that 
 });
 
 test("--tool + --file matches a call whose paired result reported failure", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "cc-grep-failed-"));
+  const dir = await mkdtemp(join(tmpdir(), "cg-failed-"));
   try {
     await writeFile(
       join(dir, "s.jsonl"),
@@ -324,7 +324,7 @@ test("--file alone still separates a tool call from a prose mention", async () =
 });
 
 async function twoFileCorpus(fn) {
-  const dir = await mkdtemp(join(tmpdir(), "cc-grep-maxcount-"));
+  const dir = await mkdtemp(join(tmpdir(), "cg-maxcount-"));
   const turn = (sessionId) =>
     JSON.stringify({
       type: "user",
@@ -386,7 +386,7 @@ test("maxCount stops reading rather than filtering after the fact", async () => 
  * decoded form against raw bytes would drop these.
  */
 async function escapedCorpus(fn) {
-  const dir = await mkdtemp(join(tmpdir(), "cc-grep-escaped-"));
+  const dir = await mkdtemp(join(tmpdir(), "cg-escaped-"));
   const line = (sessionId, content) =>
     JSON.stringify({
       type: "user",
@@ -458,7 +458,7 @@ test("a pattern whose only safe run is short still hits", async () => {
 // An HTML-escaping serialiser writes ">" as >, so the raw line and the
 // decoded text differ on a character the prefilter would otherwise scan for.
 test("a hit survives when the JSONL \\u-escapes an ordinary character", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "cc-grep-uescape-"));
+  const dir = await mkdtemp(join(tmpdir(), "cg-uescape-"));
   try {
     const BS = String.fromCharCode(92);
     const raw =
@@ -477,7 +477,7 @@ test("a hit survives when the JSONL \\u-escapes an ordinary character", async ()
 // JSON.parse canonicalises 1e2 to 100, so the rendered digits appear nowhere in
 // the raw line and a raw scan for them cannot succeed.
 test("a hit survives when JSON canonicalises the number that matched", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "cc-grep-number-"));
+  const dir = await mkdtemp(join(tmpdir(), "cg-number-"));
   try {
     await writeFile(
       join(dir, "a.jsonl"),
@@ -496,7 +496,7 @@ test("a hit survives when JSON canonicalises the number that matched", async () 
 // 1e400 overflows to Infinity, so the value reaches the matcher as "null" —
 // a token that appears nowhere in the raw line.
 test("a hit survives when an overflowing number renders as null", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "cc-grep-overflow-"));
+  const dir = await mkdtemp(join(tmpdir(), "cg-overflow-"));
   try {
     await writeFile(
       join(dir, "a.jsonl"),
@@ -518,7 +518,7 @@ test("a hit survives when an overflowing number renders as null", async () => {
 });
 
 async function withCodexCorpus(fn) {
-  const dir = await mkdtemp(join(tmpdir(), "cc-grep-codex-search-"));
+  const dir = await mkdtemp(join(tmpdir(), "cg-codex-search-"));
   await writeFile(
     join(dir, "rollout-2026-07-12T00-00-00-t1.jsonl"),
     [

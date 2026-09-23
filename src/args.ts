@@ -11,12 +11,12 @@ import type {
   TranscriptSource,
 } from "./types.js";
 
-export const HELP = `cc-grep — grep across Claude Code and Codex session transcripts
+export const HELP = `cg — grep your coding agent sessions (Claude Code, Codex)
 
 Usage:
-  cc-grep <pattern> [options]
-  cc-grep --session <id> [pattern] [options]
-  cc-grep --tool <name[,name...]> [--file <substring>] [pattern] [options]
+  cg <pattern> [options]
+  cg --session <id> [pattern] [options]
+  cg --tool <name[,name...]> [--file <substring>] [pattern] [options]
 
 Pattern:
   Substring match by default.
@@ -30,9 +30,9 @@ Scope:
                        an unreadable root nobody named is skipped, while one
                        named by a flag or env var below is an error)
   --root <path>        Claude's transcript root
-                       (else $CC_GREP_ROOT, else ~/.claude/projects)
+                       (else $CG_ROOT, else ~/.claude/projects)
   --codex-root <path>  Codex's transcript root
-                       (else $CC_GREP_CODEX_ROOT, else ~/.codex/sessions)
+                       (else $CG_CODEX_ROOT, else ~/.codex/sessions)
   Dash-prefixed option values require --option=value (e.g. --cwd=-generated).
 
 Filters:
@@ -68,13 +68,13 @@ Context & output:
   -V, --version        Show version
 
 Examples:
-  cc-grep "auth flow"                                  Search every transcript
-  cc-grep "auth flow" -c                               How many hits? (survey first)
-  cc-grep "auth flow" -l                               Which sessions mention it?
-  cc-grep "auth flow" --role user --subagents exclude  Only what the human asked
-  cc-grep "auth flow" --since 30d -m 20                Recent, capped at 20 hits
-  cc-grep --session a1b2c3d4 --role user               Read one session's asks
-  cc-grep "auth flow" --source codex                   Only Codex transcripts
+  cg "auth flow"                                  Search every transcript
+  cg "auth flow" -c                               How many hits? (survey first)
+  cg "auth flow" -l                               Which sessions mention it?
+  cg "auth flow" --role user --subagents exclude  Only what the human asked
+  cg "auth flow" --since 30d -m 20                Recent, capped at 20 hits
+  cg --session a1b2c3d4 --role user               Read one session's asks
+  cg "auth flow" --source codex                   Only Codex transcripts
 
 A broad pattern can match thousands of turns and print megabytes. Survey with
 -c or -l first, then narrow with the filters above or cap with -m.

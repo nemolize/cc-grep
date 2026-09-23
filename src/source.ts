@@ -4,17 +4,18 @@ import type { ResolvedRoot, TranscriptSource } from "./types.js";
 
 interface SourceProfile {
   homeSegments: string[];
-  rootEnv: string;
+  /** The legacy `CC_GREP_*` names keep pre-rename shell profiles working. */
+  rootEnvs: readonly string[];
 }
 
 const PROFILES: Record<TranscriptSource, SourceProfile> = {
   claude: {
     homeSegments: [".claude", "projects"],
-    rootEnv: "CC_GREP_ROOT",
+    rootEnvs: ["CG_ROOT", "CC_GREP_ROOT"],
   },
   codex: {
     homeSegments: [".codex", "sessions"],
-    rootEnv: "CC_GREP_CODEX_ROOT",
+    rootEnvs: ["CG_CODEX_ROOT", "CC_GREP_CODEX_ROOT"],
   },
 };
 
@@ -26,9 +27,11 @@ function resolveRoot(
   home: string,
 ): ResolvedRoot {
   const profile = PROFILES[source];
-  const override = env[profile.rootEnv];
-  if (override !== undefined && override.length > 0) {
-    return { path: override, namedBy: profile.rootEnv };
+  for (const name of profile.rootEnvs) {
+    const override = env[name];
+    if (override !== undefined && override.length > 0) {
+      return { path: override, namedBy: name };
+    }
   }
   return { path: join(home, ...profile.homeSegments) };
 }
