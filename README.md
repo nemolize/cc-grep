@@ -226,14 +226,18 @@ was attempted, and whether it landed lives in the paired result. An edit that
 failed on a stale `old_string` still matches — which is usually what you want,
 since the attempt is itself evidence that session was working on the file.
 
-This section is Claude-only: a Codex tool call records no path field, so `--file`
-never selects one and `--tool` takes Codex's own tool names — see
-[Codex support](#codex-support).
+`--file` and `--tool` as described here are Claude-only: a Codex tool call
+records no path field, so `--file` never selects one and `--tool` takes Codex's
+own tool names — see [Codex support](#codex-support).
 
 `--json` carries a `toolCalls` array (`{name, paths, input}`) on any hit that
 made one, so the attribution is machine-readable without re-parsing the rendered
-lines. `input` is the call's input as its agent recorded it — field names inside
-it are each agent's own, not a shared vocabulary:
+lines. On a patternless search `matchedLines` comes back empty for the same
+reason the header stands alone — every line "matched", so listing them says
+nothing.
+
+`input` is the call's input as its agent recorded it — field names inside it are
+each agent's own, not a shared vocabulary:
 
 | Source | Call shape         | `input` is                                                        |
 | ------ | ------------------ | ----------------------------------------------------------------- |
@@ -246,8 +250,10 @@ it are each agent's own, not a shared vocabulary:
 A call that carries no input omits the key. `input` is always emitted in full —
 no truncation, since a cut value would silently miscount in `jq`; drop it with
 `jq 'del(.toolCalls[]?.input)'` when you do not want it.
-On a patternless search `matchedLines` comes back empty for the same reason the
-header stands alone — every line "matched", so listing them says nothing.
+
+A Codex `web_search_call` is collected only when its `action` carries a query;
+`open_page` and `find_in_page` actions carry none and produce no hit, so they are
+absent from `toolCalls` too.
 
 ## Codex support
 
@@ -265,9 +271,9 @@ JSON escaping or quoted object keys.
 Three filters read something Codex records differently, or not at all:
 
 - **`--file` never matches a Codex turn.** Codex passes a tool's arguments as one
-  opaque string — JavaScript source for `exec`, a JSON blob for a function call —
-  so no field is known to hold a path, and guessing one would attribute edits to
-  sessions that merely mentioned a filename. Grep for the path instead. A run
+  string — JavaScript source for `exec`, a JSON blob for a function call — and
+  even parsed, no field is known to hold a path, so guessing one would attribute
+  edits to sessions that merely mentioned a filename. Grep for the path instead. A run
   that pairs it with a Codex root says on stderr that it searched Claude only,
   so an empty result is never mistaken for "Codex has none either".
 - **`--tool` matches Codex's own tool names** (`exec`, `send_message`,

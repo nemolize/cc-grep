@@ -164,6 +164,19 @@ test("a function call whose arguments are not JSON keeps the raw string", async 
   });
 });
 
+test("a function call with no arguments omits the input key", async () => {
+  await withCodexFile(
+    [meta(), functionCall(undefined), functionCall("null")],
+    (turns) => {
+      expect(turns).toHaveLength(2);
+      for (const turn of turns) {
+        expect(turn.toolCalls).toEqual([{ name: "shell", paths: [] }]);
+        expect(turn.toolCalls[0]).not.toHaveProperty("input");
+      }
+    },
+  );
+});
+
 test("a custom tool call keeps even JSON-shaped input as its string", async () => {
   const input = '{"cmd":"rg needle"}';
   await withCodexFile(

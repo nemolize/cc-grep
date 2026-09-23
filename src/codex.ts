@@ -77,8 +77,8 @@ function withInput(name: string, input: unknown): ToolCall {
 }
 
 /**
- * `paths` stays empty because arguments arrive as one opaque string, not the
- * keyed object Claude sends, so no field is known to hold a path.
+ * `paths` stays empty because no argument field is known to hold a path, even
+ * once a `function_call`'s JSON is parsed.
  */
 function readToolCall(
   payload: Record<string, unknown>,
