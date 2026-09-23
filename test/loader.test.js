@@ -87,7 +87,11 @@ test("loadTurns carries a line's tool calls onto the turn", async () => {
     for await (const t of loadTurns(file)) turns.push(t);
 
     expect(turns[0].toolCalls).toEqual([
-      { name: "Edit", paths: ["/proj/a.ts"] },
+      {
+        name: "Edit",
+        paths: ["/proj/a.ts"],
+        input: { file_path: "/proj/a.ts", old_string: "x" },
+      },
     ]);
   });
 });

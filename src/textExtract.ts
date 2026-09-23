@@ -114,7 +114,9 @@ function collectToolUse(
 
   // A nameless, pathless call matches neither filter and would only render as
   // an empty `[]` label.
-  if (name !== "" || paths.length > 0) toolCalls?.push({ name, paths });
+  if (name !== "" || paths.length > 0) {
+    toolCalls?.push({ name, paths, ...(input != null ? { input } : {}) });
+  }
 }
 
 /**

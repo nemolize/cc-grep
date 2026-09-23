@@ -1,9 +1,11 @@
-/** One `tool_use` block, reduced to what `--tool` and `--file` filter on. */
+/** One tool call: what `--tool` and `--file` filter on, plus its input for `--json`. */
 export interface ToolCall {
   /** Empty when the block carried no `name`. */
   name: string;
   /** Values of the call's path-shaped input fields, in input order. */
   paths: string[];
+  /** Per-source shape (see README); absent when the call carried none. */
+  input?: unknown;
 }
 
 /**

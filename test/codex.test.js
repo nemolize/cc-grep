@@ -125,9 +125,71 @@ test("a tool call contributes its name and arguments as searchable lines", async
     ],
     (turns) => {
       expect(turns[0].role).toBe("assistant");
-      expect(turns[0].toolCalls).toEqual([{ name: "exec", paths: [] }]);
+      expect(turns[0].toolCalls).toEqual([
+        {
+          name: "exec",
+          paths: [],
+          input: 'tools.exec_command({cmd:"rg needle"})',
+        },
+      ]);
       expect(turns[0].textLines[0]).toContain("exec");
       expect(turns[0].textLines[1]).toContain("rg needle");
+    },
+  );
+});
+
+function functionCall(args) {
+  return JSON.stringify({
+    timestamp: "2026-09-14T04:01:30.000Z",
+    type: "response_item",
+    payload: { type: "function_call", name: "shell", arguments: args },
+  });
+}
+
+test("a function call's JSON arguments become its parsed input", async () => {
+  const args = { command: ["rg", "needle"], workdir: "/proj-a" };
+  await withCodexFile([meta(), functionCall(JSON.stringify(args))], (turns) => {
+    expect(turns[0].toolCalls).toEqual([
+      { name: "shell", paths: [], input: args },
+    ]);
+  });
+});
+
+test("a function call whose arguments are not JSON keeps the raw string", async () => {
+  const args = "{not json: needle";
+  await withCodexFile([meta(), functionCall(args)], (turns) => {
+    expect(turns[0].toolCalls).toEqual([
+      { name: "shell", paths: [], input: args },
+    ]);
+  });
+});
+
+test("a function call with no arguments omits the input key", async () => {
+  await withCodexFile(
+    [meta(), functionCall(undefined), functionCall("null")],
+    (turns) => {
+      expect(turns).toHaveLength(2);
+      for (const turn of turns) {
+        expect(turn.toolCalls).toEqual([{ name: "shell", paths: [] }]);
+        expect(turn.toolCalls[0]).not.toHaveProperty("input");
+      }
+    },
+  );
+});
+
+test("a custom tool call keeps even JSON-shaped input as its string", async () => {
+  const input = '{"cmd":"rg needle"}';
+  await withCodexFile(
+    [
+      meta(),
+      JSON.stringify({
+        timestamp: "2026-09-14T04:01:40.000Z",
+        type: "response_item",
+        payload: { type: "custom_tool_call", name: "exec", input },
+      }),
+    ],
+    (turns) => {
+      expect(turns[0].toolCalls).toEqual([{ name: "exec", paths: [], input }]);
     },
   );
 });
@@ -172,7 +234,11 @@ test("a web search call contributes its queries", async () => {
       expect(turns[0].role).toBe("assistant");
       expect(turns[0].textLines[1]).toBe("needle release notes");
       expect(turns[0].toolCalls).toEqual([
-        { name: "web_search_call", paths: [] },
+        {
+          name: "web_search_call",
+          paths: [],
+          input: { type: "search", queries: ["needle release notes"] },
+        },
       ]);
     },
   );
@@ -193,6 +259,13 @@ test("a tool search call contributes its query", async () => {
     ],
     (turns) => {
       expect(turns[0].textLines[1]).toBe("serena initial_instructions");
+      expect(turns[0].toolCalls).toEqual([
+        {
+          name: "tool_search_call",
+          paths: [],
+          input: { query: "serena initial_instructions", limit: 1 },
+        },
+      ]);
     },
   );
 });
@@ -378,7 +451,9 @@ test("a tool call whose input is not a string keeps the name", async () => {
     ],
     (turns) => {
       expect(turns[0].textLines).toEqual([`${TOOL_MARK} exec`]);
-      expect(turns[0].toolCalls).toEqual([{ name: "exec", paths: [] }]);
+      expect(turns[0].toolCalls).toEqual([
+        { name: "exec", paths: [], input: { cmd: "x" } },
+      ]);
     },
   );
 });

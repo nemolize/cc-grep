@@ -366,3 +366,36 @@ test("a codex root is searched under the codex schema end to end", () => {
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("--json carries a tool call's input in full, on a hit and in a --session dump", () => {
+  const dir = mkdtempSync(join(tmpdir(), "cg-cli-"));
+  const long = "x".repeat(100_000);
+  const input = { command: `echo needle ${long}`, nested: { big: long } };
+  const sessionId = "cccccccc-1111-2222-3333-444444444444";
+  writeFileSync(
+    join(dir, "c.jsonl"),
+    JSON.stringify({
+      type: "assistant",
+      sessionId,
+      timestamp: "2026-07-13T00:00:00Z",
+      cwd: "/proj-c",
+      message: { content: [{ type: "tool_use", name: "Bash", input }] },
+    }),
+  );
+  try {
+    for (const args of [
+      ["needle", "--root", dir, "--json"],
+      ["--session", sessionId, "--root", dir, "--json"],
+    ]) {
+      const rows = runCli(args)
+        .trim()
+        .split("\n")
+        .map((l) => JSON.parse(l));
+      expect(rows).toHaveLength(1);
+      expect(rows[0].toolCalls[0].input).toStrictEqual(input);
+      expect(rows[0].toolCalls[0].input.nested.big).toBe(long);
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
