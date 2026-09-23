@@ -14,7 +14,7 @@ import { expect, test } from "vitest";
 import { findTranscripts, isReadableDir, loadTurns } from "../src/loader.js";
 
 async function withTempDir(fn) {
-  const dir = await mkdtemp(join(tmpdir(), "cc-grep-test-"));
+  const dir = await mkdtemp(join(tmpdir(), "cg-test-"));
   try {
     await fn(dir);
   } finally {

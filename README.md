@@ -1,4 +1,9 @@
-# cc-grep
+# cg
+
+_grep your coding agent sessions._
+
+> Formerly `cc-grep` (`@nemolize/cc-grep`). The `cc-grep` command still works
+> as an alias.
 
 Grep across every Claude Code and Codex session transcript on your machine, so
 you can find past conversations by content — _"what did I discuss with the agent
@@ -6,12 +11,12 @@ about X three weeks ago?"_
 
 You solved something with an agent weeks ago and now hit the same problem — but
 the shell history is gone and you can't remember which project it was in.
-`cc-grep "denyRead"` finds the turn; `--resume` drops you back into that
+`cg "denyRead"` finds the turn; `--resume` drops you back into that
 session.
 
 Claude Code stores each session as a JSONL transcript under
 `~/.claude/projects/`, and Codex stores one per thread under
-`~/.codex/sessions/`. `cc-grep` scans both and prints matching turns with their
+`~/.codex/sessions/`. `cg` scans both and prints matching turns with their
 project, timestamp, session id, and role — plus a ready-to-run resume command
 (`claude --resume <id>` or `codex resume <id>`, whichever the hit came from) to
 jump back into any hit.
@@ -25,15 +30,15 @@ Read-only. Nothing ever leaves your machine.
 ## Usage
 
 ```
-npx @nemolize/cc-grep <pattern> [options]
-cc-grep <pattern> [options]              # once installed globally
-cc-grep --session <id> [pattern]         # read one session as a conversation
-cc-grep --source codex <pattern>         # one agent's transcripts only
-cc-grep --tool Edit --file <path>        # which session touched a file (Claude)
+npx @nemolize/cg <pattern> [options]
+cg <pattern> [options]              # once installed globally
+cg --session <id> [pattern]         # read one session as a conversation
+cg --source codex <pattern>         # one agent's transcripts only
+cg --tool Edit --file <path>        # which session touched a file (Claude)
 ```
 
 ```
-$ npx @nemolize/cc-grep "auth flow"
+$ npx @nemolize/cg "auth flow"
 ~/proj-a  2026-07-10 21:34  a1b2c3d4  user
   │ …preceding line…
   │ >> …matched line with auth flow highlighted…
@@ -57,7 +62,8 @@ $ npx @nemolize/cc-grep "auth flow"
   instead would answer a question you did not ask.
 - `--root <path>` / `--codex-root <path>` — one flag per source, so either can
   be relocated without changing what the other means. Each falls back to its env
-  override — `$CC_GREP_ROOT`, `$CC_GREP_CODEX_ROOT` — and then to the path
+  override — `$CG_ROOT`, `$CG_CODEX_ROOT` (the pre-rename `CC_GREP_*` names still
+  work) — and then to the path
   above.
 
 ### Filters
@@ -99,10 +105,10 @@ Survey first, then narrow:
   status meaningful, and composes with `-c`.
 
 ```
-$ cc-grep "denyRead" -c
+$ cg "denyRead" -c
 223
 
-$ cc-grep "denyRead" -l
+$ cg "denyRead" -l
 3bdb74bf-2a64-400b-94cb-b76a9f0620df    30 hits  ~/dotfiles
 74b82329-00d8-4530-bb8b-c08d85d38c05    25 hits  ~/dotfiles
 …
@@ -131,7 +137,7 @@ read that session to recover the reasoning. `--session` covers the second step �
 it prints a session as a conversation instead of searching across all of them:
 
 ```
-$ cc-grep --session a1b2c3d4 --role user
+$ cg --session a1b2c3d4 --role user
 session a1b2c3d4-5e6f-7890-abcd-ef1234567890  ~/proj-a  (main)
 
 user  2026-07-10 21:30
@@ -203,7 +209,7 @@ string, and in a prose-heavy repo the filename's own mentions drown the rest.
 separable from the mention:
 
 ```sh
-$ cc-grep --tool Edit,Write --file 'rules/documentation-staleness.md' --since 7d
+$ cg --tool Edit,Write --file 'rules/documentation-staleness.md' --since 7d
 ~/dotfiles  2026-08-07 23:01  84c616b9  assistant  [Edit ~/dotfiles/rules/documentation-staleness.md]
 ```
 
@@ -284,35 +290,35 @@ so it carries its own id instead and is searchable under that.
 
 ```sh
 # Is X worth searching for at all, and where does it live?
-cc-grep "X" -c
-cc-grep "X" -l
+cg "X" -c
+cg "X" -l
 
 # What did I ask about X in the last month?
-cc-grep "X" --role user --since 30d --subagents exclude
+cg "X" --role user --since 30d --subagents exclude
 
 # What did the agents a session spawned actually do with X?
-cc-grep "X" --subagents only
+cg "X" --subagents only
 
 # Jump back into the most relevant past session
-cc-grep "X" --resume
+cg "X" --resume
 
 # Only sessions from a specific project
-cc-grep "X" --cwd myrepo
+cg "X" --cwd myrepo
 
 # Which session touched this file, and when?
-cc-grep --tool Edit,Write --file src/format.ts --since 7d
+cg --tool Edit,Write --file src/format.ts --since 7d
 
 # List the unique sessions that mention X (source included: the id spaces overlap)
-cc-grep "X" --json | jq -r '"\(.source) \(.sessionId)"' | sort -u
+cg "X" --json | jq -r '"\(.source) \(.sessionId)"' | sort -u
 
 # Only Codex sessions, only what the human typed
-cc-grep "X" --source codex --role user
+cg "X" --source codex --role user
 
 # What did a Codex session search the web for?
-cc-grep "X" --tool web_search_call,tool_search_call --source codex
+cg "X" --tool web_search_call,tool_search_call --source codex
 
 # Find the session that discussed X, then read how it started
-cc-grep "X" --json | jq -r .sessionId | head -1 | xargs -I{} cc-grep --session {} --role user
+cg "X" --json | jq -r .sessionId | head -1 | xargs -I{} cg --session {} --role user
 ```
 
 ## Exit status

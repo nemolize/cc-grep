@@ -72,7 +72,7 @@ for (const type of ["custom_tool_call_output", "function_call_output"]) {
 test.each(["custom_tool_call_output", "function_call_output"])(
   "%s: CLI context selects decoded lines and prefilter preserves synthesized matches",
   async (type) => {
-    const dir = await mkdtemp(join(tmpdir(), "cc-grep-output-"));
+    const dir = await mkdtemp(join(tmpdir(), "cg-output-"));
     const file = join(dir, "rollout.jsonl");
     try {
       await writeFile(

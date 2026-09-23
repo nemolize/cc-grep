@@ -44,7 +44,7 @@ test("--version reports the version in package.json", () => {
 });
 
 function withCorpus(fn) {
-  const dir = mkdtempSync(join(tmpdir(), "cc-grep-cli-"));
+  const dir = mkdtempSync(join(tmpdir(), "cg-cli-"));
   const turn = (sessionId, cwd) =>
     JSON.stringify({
       type: "user",
@@ -129,7 +129,7 @@ test("--json pairs with the summary flags", () => {
 });
 
 test("summary --json omits absent keys, matching the per-hit shape", () => {
-  const dir = mkdtempSync(join(tmpdir(), "cc-grep-cli-noid-"));
+  const dir = mkdtempSync(join(tmpdir(), "cg-cli-noid-"));
   try {
     writeFileSync(
       join(dir, "a.jsonl"),
@@ -152,7 +152,7 @@ test("summary --json omits absent keys, matching the per-hit shape", () => {
 });
 
 test("sessionless turns in different files stay separate sessions", () => {
-  const dir = mkdtempSync(join(tmpdir(), "cc-grep-cli-split-"));
+  const dir = mkdtempSync(join(tmpdir(), "cg-cli-split-"));
   try {
     const turn = JSON.stringify({
       type: "user",
@@ -228,7 +228,7 @@ test("a summary with no hits still exits 1, like a search", () => {
 // — but the run must still search the one that is there.
 test("a defaulted root that does not exist is skipped, not fatal", () => {
   withCorpus((root) => {
-    expect(runCli(["needle", "-c"], { CC_GREP_ROOT: root }).trim()).toBe("3");
+    expect(runCli(["needle", "-c"], { CG_ROOT: root }).trim()).toBe("3");
   });
 });
 
@@ -238,24 +238,24 @@ test("a named root that does not exist is an error, even when the other is reada
   withCorpus((root) => {
     expect(() =>
       runCli(["needle", "-c"], {
-        CC_GREP_ROOT: root,
-        CC_GREP_CODEX_ROOT: "/nonexistent-codex-root",
+        CG_ROOT: root,
+        CG_CODEX_ROOT: "/nonexistent-codex-root",
       }),
     ).toThrow(expect.objectContaining({ status: 1 }));
   });
 });
 
-// A stale CC_GREP_CODEX_ROOT in a shell profile otherwise surfaces as a bare
+// A stale CG_CODEX_ROOT in a shell profile otherwise surfaces as a bare
 // path, leaving the reader to guess which of three places set it.
 test("the error names what set an unreadable root, and how to fix it", () => {
   let err;
   try {
-    runCli(["needle", "-c"], { CC_GREP_CODEX_ROOT: "/nonexistent-codex" });
+    runCli(["needle", "-c"], { CG_CODEX_ROOT: "/nonexistent-codex" });
   } catch (e) {
     err = e;
   }
   expect(err.status).toBe(1);
-  expect(err.stderr).toContain('"/nonexistent-codex" (CC_GREP_CODEX_ROOT)');
+  expect(err.stderr).toContain('"/nonexistent-codex" (CG_CODEX_ROOT)');
   expect(err.stderr).toContain("Set --root");
 });
 
@@ -263,11 +263,11 @@ test("the error names what set an unreadable root, and how to fix it", () => {
 // filter cannot ask Codex at all.
 test("a Claude-only filter says so when a Codex root is in scope", () => {
   withCorpus((root) => {
-    const codexDir = mkdtempSync(join(tmpdir(), "cc-grep-cli-cx-"));
+    const codexDir = mkdtempSync(join(tmpdir(), "cg-cli-cx-"));
     try {
       const run = spawnCli(["needle", "--file", "src", "-c"], {
-        CC_GREP_ROOT: root,
-        CC_GREP_CODEX_ROOT: codexDir,
+        CG_ROOT: root,
+        CG_CODEX_ROOT: codexDir,
       });
       expect(run.stderr).toContain("--file");
       expect(run.stderr).toContain("Claude only");
@@ -297,8 +297,8 @@ test("every root missing names them all", () => {
   let err;
   try {
     runCli(["needle", "-c"], {
-      CC_GREP_ROOT: "/nonexistent-a",
-      CC_GREP_CODEX_ROOT: "/nonexistent-b",
+      CG_ROOT: "/nonexistent-a",
+      CG_CODEX_ROOT: "/nonexistent-b",
     });
   } catch (e) {
     err = e;
@@ -309,7 +309,7 @@ test("every root missing names them all", () => {
 });
 
 test("a codex root is searched under the codex schema end to end", () => {
-  const dir = mkdtempSync(join(tmpdir(), "cc-grep-cli-codex-"));
+  const dir = mkdtempSync(join(tmpdir(), "cg-cli-codex-"));
   try {
     writeFileSync(
       join(dir, "rollout-2026-07-13T00-00-00-t1.jsonl"),

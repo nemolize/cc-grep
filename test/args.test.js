@@ -245,8 +245,8 @@ test("extra positional argument errors", () => {
   expect(parse(["a", "b"]).kind).toBe("error");
 });
 
-test("CC_GREP_ROOT overrides default root", () => {
-  const r = parse(["p"], { CC_GREP_ROOT: "/custom" });
+test("CG_ROOT overrides default root", () => {
+  const r = parse(["p"], { CG_ROOT: "/custom" });
   if (r.kind === "options")
     expect(r.options.roots.get("claude")?.path).toBe("/custom");
 });
@@ -260,9 +260,35 @@ test("default root falls back to ~/.claude/projects", () => {
 });
 
 test("--root explicit beats env", () => {
-  const r = parse(["p", "--root", "/explicit"], { CC_GREP_ROOT: "/env" });
+  const r = parse(["p", "--root", "/explicit"], { CG_ROOT: "/env" });
   if (r.kind === "options")
     expect(r.options.roots.get("claude")?.path).toBe("/explicit");
+});
+
+test.each([
+  ["claude", "CC_GREP_ROOT"],
+  ["codex", "CC_GREP_CODEX_ROOT"],
+])("legacy %s root env %s still applies", (source, name) => {
+  const r = parse(["p"], { [name]: "/legacy" });
+  expect(r.kind).toBe("options");
+  if (r.kind === "options")
+    expect(r.options.roots.get(source)).toEqual({
+      path: "/legacy",
+      namedBy: name,
+    });
+});
+
+test.each([
+  ["claude", "CG_ROOT", "CC_GREP_ROOT"],
+  ["codex", "CG_CODEX_ROOT", "CC_GREP_CODEX_ROOT"],
+])("%s root: %s beats legacy %s", (source, current, legacy) => {
+  const r = parse(["p"], { [current]: "/new", [legacy]: "/old" });
+  expect(r.kind).toBe("options");
+  if (r.kind === "options")
+    expect(r.options.roots.get(source)).toEqual({
+      path: "/new",
+      namedBy: current,
+    });
 });
 
 test("--session makes the pattern optional", () => {
@@ -445,11 +471,11 @@ test("--codex-root is ignored when --source excludes codex", () => {
 });
 
 test("an env-supplied root is marked explicit; a defaulted one is not", () => {
-  const r = parse(["p"], { CC_GREP_CODEX_ROOT: "/cx" });
+  const r = parse(["p"], { CG_CODEX_ROOT: "/cx" });
   if (r.kind === "options") {
     expect(r.options.roots.get("codex")).toEqual({
       path: "/cx",
-      namedBy: "CC_GREP_CODEX_ROOT",
+      namedBy: "CG_CODEX_ROOT",
     });
     expect(r.options.roots.get("claude")?.namedBy).toBe(undefined);
   }

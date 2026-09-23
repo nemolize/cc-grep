@@ -1,30 +1,34 @@
 {
-  "name": "@nemolize/cc-grep",
+  "name": "@nemolize/cg",
   "version": "0.6.0",
-  "description": "Cross-project full-text search CLI over Claude Code session transcripts. Run with npx.",
+  "description": "grep your coding agent sessions: full-text search over Claude Code and Codex transcripts, with a resume command for every hit.",
   "publishConfig": {
     "access": "public"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/nemolize/cc-grep.git"
+    "url": "git+https://github.com/nemolize/cg.git"
   },
   "bugs": {
-    "url": "https://github.com/nemolize/cc-grep/issues"
+    "url": "https://github.com/nemolize/cg/issues"
   },
-  "homepage": "https://github.com/nemolize/cc-grep#readme",
+  "homepage": "https://github.com/nemolize/cg#readme",
   "keywords": [
     "claude",
     "claude-code",
+    "codex",
+    "coding-agent",
     "grep",
     "search",
     "transcript",
+    "session",
     "cli"
   ],
   "license": "MIT",
   "type": "module",
   "packageManager": "pnpm@12.5.1",
   "bin": {
+    "cg": "dist/cli.js",
     "cc-grep": "dist/cli.js"
   },
   "files": [
