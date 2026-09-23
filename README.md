@@ -230,8 +230,22 @@ This section is Claude-only: a Codex tool call records no path field, so `--file
 never selects one and `--tool` takes Codex's own tool names — see
 [Codex support](#codex-support).
 
-`--json` carries a `toolCalls` array (`{name, paths}`) on any hit that made one,
-so the attribution is machine-readable without re-parsing the rendered lines.
+`--json` carries a `toolCalls` array (`{name, paths, input}`) on any hit that
+made one, so the attribution is machine-readable without re-parsing the rendered
+lines. `input` is the call's input as its agent recorded it — field names inside
+it are each agent's own, not a shared vocabulary:
+
+| Source | Call shape         | `input` is                                                        |
+| ------ | ------------------ | ----------------------------------------------------------------- |
+| Claude | `tool_use` block   | the block's `input`, verbatim                                     |
+| Codex  | `function_call`    | `arguments` parsed as JSON; the raw string when it does not parse |
+| Codex  | `custom_tool_call` | `input`, a string (e.g. JavaScript source for `exec`), as-is      |
+| Codex  | `tool_search_call` | `arguments`, already an object, verbatim                          |
+| Codex  | `web_search_call`  | `action`, verbatim                                                |
+
+A call that carries no input omits the key. `input` is always emitted in full —
+no truncation, since a cut value would silently miscount in `jq`; drop it with
+`jq 'del(.toolCalls[]?.input)'` when you do not want it.
 On a patternless search `matchedLines` comes back empty for the same reason the
 header stands alone — every line "matched", so listing them says nothing.
 

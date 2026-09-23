@@ -4,6 +4,8 @@ export interface ToolCall {
   name: string;
   /** Values of the call's path-shaped input fields, in input order. */
   paths: string[];
+  /** The call's input as its source recorded it; absent when it carried none. */
+  input?: unknown;
 }
 
 /**

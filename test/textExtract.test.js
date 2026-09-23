@@ -158,7 +158,9 @@ test("extractContent collects tool calls alongside the text", () => {
     { type: "tool_use", name: "Edit", input: { file_path: "/a/b.ts" } },
   ]);
   expect(textLines).toEqual(["before", "⚙ Edit", "file_path: /a/b.ts"]);
-  expect(toolCalls).toEqual([{ name: "Edit", paths: ["/a/b.ts"] }]);
+  expect(toolCalls).toEqual([
+    { name: "Edit", paths: ["/a/b.ts"], input: { file_path: "/a/b.ts" } },
+  ]);
 });
 
 test("only path-shaped fields land in a tool call's paths", () => {
@@ -171,9 +173,31 @@ test("only path-shaped fields land in a tool call's paths", () => {
     },
   ]);
   expect(toolCalls).toEqual([
-    { name: "Grep", paths: [] },
-    { name: "NotebookEdit", paths: ["/n.ipynb"] },
+    { name: "Grep", paths: [], input: { pattern: "x", path: "/a" } },
+    {
+      name: "NotebookEdit",
+      paths: ["/n.ipynb"],
+      input: { notebook_path: "/n.ipynb" },
+    },
   ]);
+});
+
+test("a tool call carries its input verbatim", () => {
+  const input = {
+    command: "ls -la",
+    nested: { list: [1, "two", null, { deep: true }], empty: "" },
+    flag: false,
+  };
+  const { toolCalls } = extractContent([
+    { type: "tool_use", name: "Bash", input },
+  ]);
+  expect(toolCalls[0].input).toStrictEqual(input);
+});
+
+test("a tool call with no input omits the key", () => {
+  const { toolCalls } = extractContent([{ type: "tool_use", name: "Noop" }]);
+  expect(toolCalls).toEqual([{ name: "Noop", paths: [] }]);
+  expect(toolCalls[0]).not.toHaveProperty("input");
 });
 
 test("a turn with no tool_use has no tool calls", () => {
@@ -191,7 +215,7 @@ test("a nameless call is still recorded when it carries a path", () => {
   expect(
     extractContent([{ type: "tool_use", input: { file_path: "/tmp/x" } }])
       .toolCalls,
-  ).toEqual([{ name: "", paths: ["/tmp/x"] }]);
+  ).toEqual([{ name: "", paths: ["/tmp/x"], input: { file_path: "/tmp/x" } }]);
 });
 
 test("a tool_use echoed back inside a tool_result is not a collected call", () => {
@@ -217,5 +241,7 @@ test("a real call is still collected after a tool_result in the same turn", () =
     },
     { type: "tool_use", name: "Edit", input: { file_path: "/e" } },
   ]);
-  expect(toolCalls).toEqual([{ name: "Edit", paths: ["/e"] }]);
+  expect(toolCalls).toEqual([
+    { name: "Edit", paths: ["/e"], input: { file_path: "/e" } },
+  ]);
 });

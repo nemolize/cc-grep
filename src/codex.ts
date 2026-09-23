@@ -64,6 +64,18 @@ function collectMessageText(content: unknown): string[] {
   return out;
 }
 
+function parseArguments(raw: string): unknown {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return raw;
+  }
+}
+
+function withInput(name: string, input: unknown): ToolCall {
+  return { name, paths: [], ...(input != null ? { input } : {}) };
+}
+
 /**
  * `paths` stays empty because arguments arrive as one opaque string, not the
  * keyed object Claude sends, so no field is known to hold a path.
@@ -80,7 +92,12 @@ function readToolCall(
   if (name !== "") textLines.push(`${TOOL_MARK} ${name}`);
   if (args !== undefined) textLines.push(...args.split("\n"));
 
-  return { toolCall: { name, paths: [] }, textLines };
+  let input = payload["input"];
+  if (payload["type"] === "function_call") {
+    input = payload["arguments"];
+    if (typeof input === "string") input = parseArguments(input);
+  }
+  return { toolCall: withInput(name, input), textLines };
 }
 
 /**
@@ -111,8 +128,9 @@ function readSearchCall(
   }
   if (queries.length === 0) return undefined;
 
+  const input = name === "web_search_call" ? action : args;
   return {
-    toolCall: { name, paths: [] },
+    toolCall: withInput(name, input),
     textLines: [`${TOOL_MARK} ${name}`, ...queries],
   };
 }
