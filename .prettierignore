@@ -2,5 +2,5 @@ dist
 pnpm-lock.yaml
 .claude
 .serena
-# pnpm creates and removes _tmp_<pid>_<hex> probe files in the package root on every run.
+# pnpm creates and removes these store probes while parallel lint scripts start.
 _tmp_*
