@@ -1,6 +1,6 @@
 {
   "name": "@nemolize/cg",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "grep your coding agent sessions: full-text search over Claude Code and Codex transcripts, with a resume command for every hit.",
   "publishConfig": {
     "access": "public"

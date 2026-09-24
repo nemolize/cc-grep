@@ -1,5 +1,11 @@
 # @nemolize/cc-grep
 
+## 0.8.0
+
+### Minor Changes
+
+- [#136](https://github.com/nemolize/cg/pull/136) [`99f3ac5`](https://github.com/nemolize/cg/commit/99f3ac5061a5e0f7dc929debfe9542624164aa4d) - `--json` now carries each tool call's input as `toolCalls[].input`, as each agent recorded it (Codex `function_call` arguments parsed from JSON), in full.
+
 ## 0.7.0
 
 ### Minor Changes
